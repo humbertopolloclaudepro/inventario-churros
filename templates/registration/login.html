@@ -1,0 +1,24 @@
+{% load static %}<!doctype html>
+<html lang="es-MX">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#b45309">
+  <title>Entrar · Inventario</title>
+  <link rel="manifest" href="{% url 'manifest' %}">
+  <link rel="stylesheet" href="{% static 'pwa/styles.css' %}">
+</head>
+<body>
+  <main>
+    <form method="post" class="formulario tarjeta">
+      {% csrf_token %}
+      <h2>Inventario · Los Churros Rellenos</h2>
+      {% if form.errors %}<p class="sub" style="color:var(--error)">Usuario o contraseña incorrectos.</p>{% endif %}
+      <label>Usuario <input name="username" autocomplete="username" autocapitalize="none" required autofocus></label>
+      <label>Contraseña <input name="password" type="password" autocomplete="current-password" required></label>
+      <input type="hidden" name="next" value="{{ next|default:'/app/' }}">
+      <button class="boton primario" type="submit">Entrar</button>
+    </form>
+  </main>
+</body>
+</html>

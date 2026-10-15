@@ -1,0 +1,150 @@
+/* Pensado para usarse con una mano en el mostrador: botones grandes y texto legible. */
+:root {
+  --fondo: #f7f5f2;
+  --superficie: #ffffff;
+  --texto: #1f1b16;
+  --texto-suave: #6b6359;
+  --borde: #e3ddd4;
+  --acento: #b45309;
+  --acento-texto: #ffffff;
+  --ok: #15803d;
+  --error: #b91c1c;
+  --radio: 12px;
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --fondo: #171411;
+    --superficie: #221e1a;
+    --texto: #f3eee8;
+    --texto-suave: #b0a69a;
+    --borde: #3a332c;
+    --acento: #f59e0b;
+    --acento-texto: #1f1b16;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font: 16px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  background: var(--fondo);
+  color: var(--texto);
+  padding-bottom: calc(72px + env(safe-area-inset-bottom));
+}
+
+.oculto { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+
+.barra {
+  position: sticky; top: 0; z-index: 2;
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 16px;
+  background: var(--superficie);
+  border-bottom: 1px solid var(--borde);
+}
+.barra .usuario { margin-left: auto; color: var(--texto-suave); font-size: 14px; }
+.barra form { margin: 0; }
+.enlace { background: none; border: 0; color: var(--acento); font: inherit; padding: 4px; cursor: pointer; }
+
+main { padding: 16px; max-width: 640px; margin: 0 auto; }
+.vista { display: none; }
+.vista.activa { display: block; }
+
+input, select {
+  width: 100%;
+  font: inherit;
+  padding: 12px;
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  background: var(--superficie);
+  color: var(--texto);
+  min-height: 48px;
+}
+input:focus, select:focus { outline: 2px solid var(--acento); outline-offset: 1px; }
+.campo-busqueda input { font-size: 18px; }
+
+.boton {
+  min-height: 48px;
+  padding: 0 18px;
+  border-radius: var(--radio);
+  border: 1px solid var(--borde);
+  background: var(--superficie);
+  color: var(--texto);
+  font: inherit; font-weight: 600;
+  cursor: pointer;
+}
+.boton.primario { background: var(--acento); border-color: var(--acento); color: var(--acento-texto); }
+.boton:disabled { opacity: .45; cursor: not-allowed; }
+.boton.chico { min-width: 48px; padding: 0; font-size: 22px; }
+
+.fila { display: flex; gap: 8px; margin-top: 12px; }
+.fila > * { flex: 1; }
+
+.lista { margin-top: 16px; display: grid; gap: 12px; }
+.vacio { color: var(--texto-suave); text-align: center; margin: 24px 0; }
+
+.tarjeta {
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  padding: 14px;
+}
+.tarjeta h3 { margin: 0 0 4px; font-size: 17px; }
+.tarjeta.nuevo { border-color: var(--acento); }
+.sub { margin: 0; color: var(--texto-suave); font-size: 14px; overflow-wrap: anywhere; }
+
+.ubicaciones { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 6px; }
+.ubicaciones li {
+  display: flex; justify-content: space-between; gap: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--fondo);
+}
+.ubic { font-weight: 700; font-size: 17px; }
+.cant { white-space: nowrap; color: var(--texto-suave); }
+.sin-stock { color: var(--texto-suave); }
+
+.lector { border-radius: var(--radio); overflow: hidden; background: #000; min-height: 0; }
+.lector:empty { display: none; }
+
+.formulario { display: grid; gap: 12px; }
+.formulario h2 { margin: 0; font-size: 20px; }
+.formulario label { display: grid; gap: 6px; font-size: 14px; color: var(--texto-suave); }
+.con-boton { display: flex; gap: 8px; }
+.dos { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+.pestanas {
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 2;
+  display: flex;
+  background: var(--superficie);
+  border-top: 1px solid var(--borde);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.pestanas button {
+  flex: 1; min-height: 60px;
+  background: none; border: 0;
+  font: inherit; font-weight: 600;
+  color: var(--texto-suave);
+  cursor: pointer;
+}
+.pestanas button.activa { color: var(--acento); box-shadow: inset 0 3px 0 var(--acento); }
+
+dialog {
+  width: min(92vw, 440px);
+  border: 0; border-radius: 16px;
+  padding: 20px;
+  background: var(--superficie); color: var(--texto);
+}
+dialog::backdrop { background: rgb(0 0 0 / .45); }
+
+.aviso {
+  position: fixed; left: 16px; right: 16px; bottom: calc(76px + env(safe-area-inset-bottom)); z-index: 3;
+  max-width: 608px; margin: 0 auto;
+  padding: 14px 16px;
+  border-radius: var(--radio);
+  color: #fff; font-weight: 600;
+  background: var(--ok);
+}
+.aviso.error { background: var(--error); }

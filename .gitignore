@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+db.sqlite3
+staticfiles/
+media/
+*.csv
+!docs/plantilla_catalogo.csv
+.DS_Store
+.vscode/
+.idea/

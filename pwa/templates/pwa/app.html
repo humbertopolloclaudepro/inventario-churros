@@ -1,0 +1,111 @@
+{% load static %}<!doctype html>
+<html lang="es-MX">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#b45309">
+  <title>Inventario · Los Churros Rellenos</title>
+  <link rel="manifest" href="{% url 'manifest' %}">
+  <link rel="icon" href="{% static 'pwa/icons/icon-192.png' %}">
+  <link rel="apple-touch-icon" href="{% static 'pwa/icons/icon-192.png' %}">
+  <link rel="stylesheet" href="{% static 'pwa/styles.css' %}">
+</head>
+<body data-admin="{{ es_admin|yesno:'1,0' }}">
+  <header class="barra">
+    <strong>Inventario</strong>
+    <span class="usuario">{{ request.user.get_username }}{% if es_admin %} · Admin{% endif %}</span>
+    <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="enlace" type="submit">Salir</button></form>
+  </header>
+
+  <main>
+    <!-- BUSCAR -->
+    <section id="vista-buscar" class="vista activa">
+      <label class="campo-busqueda">
+        <span class="oculto">Buscar producto</span>
+        <input id="q" type="search" placeholder='Busca: "mica s23 ultra"' autocomplete="off" enterkeyhint="search">
+      </label>
+      <div id="resultados" class="lista" aria-live="polite">
+        <p class="vacio">Escribe al menos 2 letras o escanea un código.</p>
+      </div>
+    </section>
+
+    <!-- ESCANEAR -->
+    <section id="vista-escanear" class="vista">
+      <div id="lector" class="lector"></div>
+      <div class="fila">
+        <button id="btn-escanear" class="boton primario" type="button">Activar cámara</button>
+      </div>
+      <form id="form-codigo-manual" class="fila">
+        <input id="codigo-manual" placeholder="o teclea el código" inputmode="text" autocomplete="off">
+        <button class="boton" type="submit">Buscar</button>
+      </form>
+      <div id="resultado-escaneo" class="lista" aria-live="polite"></div>
+    </section>
+
+    <!-- ALTA RÁPIDA -->
+    <section id="vista-alta" class="vista">
+      <form id="form-alta" class="formulario">
+        <h2>Alta rápida</h2>
+        <label>Código de barras
+          <input name="codigo_barras" id="alta-codigo" placeholder="Vacío = el sistema genera uno" autocomplete="off">
+        </label>
+        <label>Categoría
+          <span class="con-boton"><select name="categoria" id="alta-categoria" required></select>
+          <button type="button" class="boton chico" data-nuevo="categoria" aria-label="Nueva categoría">+</button></span>
+        </label>
+        <label>Marca
+          <span class="con-boton"><select id="alta-marca" required></select>
+          <button type="button" class="boton chico" data-nuevo="marca" aria-label="Nueva marca">+</button></span>
+        </label>
+        <label>Modelo de teléfono
+          <span class="con-boton"><select name="modelo_telefono" id="alta-modelo" required></select>
+          <button type="button" class="boton chico" data-nuevo="modelo" aria-label="Nuevo modelo">+</button></span>
+        </label>
+        <label>Producto
+          <input name="nombre_producto" required placeholder="Funda uso rudo" autocomplete="off">
+        </label>
+        <div class="dos">
+          <label>Color <input name="color" autocomplete="off"></label>
+          <label>Material <input name="material" autocomplete="off"></label>
+        </div>
+        <div class="dos">
+          <label>Precio de venta <input name="precio" type="number" min="0" step="0.01" inputmode="decimal" required></label>
+          {% if es_admin %}<label>Costo <input name="costo" type="number" min="0" step="0.01" inputmode="decimal"></label>{% endif %}
+        </div>
+        <div class="dos">
+          <label>Cantidad <input name="cantidad" type="number" min="0" value="1" inputmode="numeric" required></label>
+          <label>Ubicación <select name="ubicacion" id="alta-ubicacion"></select></label>
+        </div>
+        <button class="boton primario" type="submit">Guardar producto</button>
+      </form>
+      <div id="resultado-alta" class="lista"></div>
+    </section>
+  </main>
+
+  <nav class="pestanas">
+    <button data-vista="buscar" class="activa" type="button">Buscar</button>
+    <button data-vista="escanear" type="button">Escanear</button>
+    <button data-vista="alta" type="button">Alta</button>
+  </nav>
+
+  <!-- Diálogo de movimiento (entrada / salida) -->
+  <dialog id="dlg-mov">
+    <form id="form-mov" method="dialog" class="formulario">
+      <h2 id="mov-titulo">Movimiento</h2>
+      <p id="mov-producto" class="sub"></p>
+      <label>Motivo <select id="mov-motivo"></select></label>
+      <label>Ubicación <select id="mov-ubicacion" required></select></label>
+      <label>Cantidad <input id="mov-cantidad" type="number" min="1" value="1" inputmode="numeric" required></label>
+      <div class="fila">
+        <button class="boton" value="cancelar" type="button" id="mov-cancelar">Cancelar</button>
+        <button class="boton primario" type="submit" id="mov-ok">Registrar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="aviso" class="aviso" role="status" hidden></div>
+
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js" defer></script>
+  <script src="{% static 'pwa/app.js' %}" defer></script>
+</body>
+</html>

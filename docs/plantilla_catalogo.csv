@@ -1,0 +1,6 @@
+categoria,marca,modelo,producto,color,material,codigo_barras,precio,costo,stock_minimo,zona,nivel,caja,cantidad
+Fundas,Apple,iPhone 14,Funda uso rudo,Negro,Policarbonato,7501234567890,250,90,3,Cajonera 1,A,Caja Azul,8
+Fundas,Apple,iPhone 14 Pro,Funda uso rudo,Negro,Policarbonato,7501234567891,250,90,3,Cajonera 1,A,Caja Roja,5
+Fundas,Apple,iPhone 14,Funda silicón,Rojo,Silicón,,180,55,2,Cajonera 1,B,,6
+Micas,Samsung,Galaxy S23 Ultra,Mica privacidad,,Cristal templado,7509876543210,150,35,5,Cajonera 2,B,,12
+Cargadores,Genérico,USB-C,Cargador 20W,Blanco,,,220,80,2,Estante A,1,,4
