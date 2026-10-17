@@ -161,11 +161,25 @@ async function iniciarEscaner() {
     verbose: false,
     formatsToSupport: [F.QR_CODE, F.EAN_13, F.EAN_8, F.UPC_A, F.UPC_E, F.CODE_128],
   });
+  // Se muestra el contenedor ANTES de iniciar: el lector usa su ancho para dimensionar el video.
+  $("#lector").hidden = false;
   try {
-    await lector.start({ facingMode: "environment" }, { fps: 10, qrbox: { width: 260, height: 160 } }, alLeer);
+    await lector.start(
+      { facingMode: "environment" },
+      {
+        fps: 10,
+        // Recuadro guía proporcional a la pantalla (sirve en celular y en computadora).
+        qrbox: (ancho, alto) => ({
+          width: Math.max(160, Math.floor(Math.min(ancho * 0.8, 340))),
+          height: Math.max(100, Math.floor(Math.min(alto * 0.5, 200))),
+        }),
+      },
+      alLeer
+    );
     escaneando = true;
     $("#btn-escanear").textContent = "Detener cámara";
   } catch (err) {
+    $("#lector").hidden = true;
     aviso(`No se pudo abrir la cámara: ${err}`, "error");
   }
 }
@@ -175,6 +189,7 @@ async function detenerEscaner() {
     try { await lector.stop(); } catch { /* ya estaba detenido */ }
   }
   escaneando = false;
+  $("#lector").hidden = true;
   $("#btn-escanear").textContent = "Activar cámara";
 }
 

@@ -2,7 +2,7 @@
 // La API nunca se guarda en caché: el stock siempre se pide al servidor.
 // TODO (iteración, P1): cola offline de movimientos en IndexedDB que se envía al
 // recuperar la conexión. La API ya acepta uuid_cliente para no duplicar.
-const CACHE = "inventario-v1";
+const CACHE = "inventario-v2";
 const ARCHIVOS = [
   "/app/",
   "{% static 'pwa/app.js' %}",
@@ -42,6 +42,17 @@ self.addEventListener("fetch", (e) => {
     );
     return;
   }
-  // Archivos estáticos: caché primero.
-  e.respondWith(caches.match(e.request).then((r) => r || fetch(e.request)));
+  // Archivos estáticos: red primero para que siempre llegue la versión nueva;
+  // la copia guardada solo se usa si no hay conexión.
+  e.respondWith(
+    fetch(e.request)
+      .then((r) => {
+        if (r.ok) {
+          const copia = r.clone();
+          caches.open(CACHE).then((c) => c.put(e.request, copia));
+        }
+        return r;
+      })
+      .catch(() => caches.match(e.request))
+  );
 });

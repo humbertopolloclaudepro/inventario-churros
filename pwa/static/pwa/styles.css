@@ -106,8 +106,10 @@ input:focus, select:focus { outline: 2px solid var(--acento); outline-offset: 1p
 .cant { white-space: nowrap; color: var(--texto-suave); }
 .sin-stock { color: var(--texto-suave); }
 
-.lector { border-radius: var(--radio); overflow: hidden; background: #000; min-height: 0; }
-.lector:empty { display: none; }
+/* El contenedor debe estar visible ANTES de encender la cámara: el lector mide su ancho al iniciar. */
+.lector { width: 100%; border-radius: var(--radio); overflow: hidden; background: #000; }
+.lector[hidden] { display: none; }
+.lector video { width: 100% !important; height: auto !important; display: block; }
 
 .formulario { display: grid; gap: 12px; }
 .formulario h2 { margin: 0; font-size: 20px; }
