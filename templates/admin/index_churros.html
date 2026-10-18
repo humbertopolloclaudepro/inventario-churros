@@ -1,0 +1,16 @@
+{% extends "admin/index.html" %}
+{% comment %}Página inicial del panel: igual a la de Django, con una sección de Reportes arriba.{% endcomment %}
+{% block content %}
+<div id="content-main">
+  <div class="app-reportes module">
+    <table>
+      <caption>Reportes</caption>
+      <tr>
+        <th scope="row"><a href="{% url 'reporte-inventario' %}" target="_blank" rel="noopener">Inventario actual por categoría (PDF)</a></th>
+        <td></td>
+      </tr>
+    </table>
+  </div>
+  {% include "admin/app_list.html" with app_list=app_list show_changelinks=True %}
+</div>
+{% endblock %}

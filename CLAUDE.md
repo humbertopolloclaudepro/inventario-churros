@@ -20,7 +20,8 @@ iteración 9–13 nov, prueba final 17–20 nov.
 - `catalogo/` — Categoria > Marca > ModeloTelefono > Producto > Variante (el SKU).
   El admin de esta app es el **dashboard del dueño** (radar, stock bajo, etiquetas).
 - `inventario/` — Ubicacion, Existencia (stock por variante y ubicación), Movimiento (inmutable),
-  reglas de negocio (`services.py`), API para la app (`api.py`, `api_urls.py`), etiquetas QR (`etiquetas.py`).
+  reglas de negocio (`services.py`), API para la app (`api.py`, `api_urls.py`), etiquetas QR (`etiquetas.py`),
+  reporte PDF por categoría (`reportes.py` sin Django + `views.py`, en `/reportes/inventario.pdf`).
 - `pwa/` — la app del celular: una sola página (`templates/pwa/app.html` + `static/pwa/app.js`),
   JavaScript sin frameworks, escáner con html5-qrcode, instalable en Android.
 

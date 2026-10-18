@@ -222,6 +222,47 @@ class ImportarTests(TestCase):
         self.assertEqual(sum(Existencia.objects.values_list("cantidad", flat=True)), 35)
 
 
+class ReporteTests(Base):
+    def test_requiere_sesion(self):
+        r = self.client.get("/reportes/inventario.pdf")
+        self.assertEqual(r.status_code, 302)
+        self.assertIn("/login/", r["Location"])
+
+    def test_admin_y_vendedor_obtienen_pdf(self):
+        self.entrada(4)
+        for usuario in (self.admin, self.vendedor):
+            self.client.force_login(usuario)
+            r = self.client.get("/reportes/inventario.pdf")
+            self.assertEqual(r.status_code, 200)
+            self.assertEqual(r["Content-Type"], "application/pdf")
+            self.assertTrue(r.content.startswith(b"%PDF"))
+
+    def test_filas_incluyen_ubicaciones_y_agotados(self):
+        from inventario.views import filas_reporte
+        self.entrada(4)
+        Variante.objects.create(producto=self.variante.producto, color="Rojo", codigo_barras="7502", precio=250)
+        filas = filas_reporte()
+        self.assertEqual(len(filas), 2)
+        negra = next(f for f in filas if f["codigo"] == "7501")
+        self.assertEqual(negra["ubicaciones"], [("Cajonera 2 · Nivel B", 4)])
+        roja = next(f for f in filas if f["codigo"] == "7502")
+        self.assertEqual(roja["ubicaciones"], [])
+
+    def test_resumen_por_categoria(self):
+        from inventario.reportes import resumir
+        from inventario.views import filas_reporte
+        self.entrada(4)
+        r = resumir(filas_reporte())["Fundas"]
+        self.assertEqual((r["variantes"], r["piezas"], r["agotadas"]), (1, 4, 0))
+        self.assertEqual(r["valor_costo"], 360)
+
+    def test_panel_muestra_enlace(self):
+        jefe = get_user_model().objects.create_superuser("jefe", password="x")
+        self.client.force_login(jefe)
+        self.assertContains(self.client.get("/admin/"), "/reportes/inventario.pdf")
+        self.assertContains(self.client.get("/admin/catalogo/variante/"), "/reportes/inventario.pdf")
+
+
 class PwaTests(Base):
     def test_app_requiere_login_y_carga(self):
         self.assertEqual(self.client.get("/app/").status_code, 302)
