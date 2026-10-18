@@ -4,7 +4,7 @@ from django.db.models import Sum
 from django.http import HttpResponse
 
 from .etiquetas import generar_pdf
-from .models import Existencia, Movimiento, Ubicacion
+from .models import Auditoria, ConteoAuditoria, Existencia, Movimiento, Ubicacion
 from .services import MOTIVOS_POR_TIPO, ErrorInventario, registrar_movimiento
 
 
@@ -108,3 +108,43 @@ class MovimientoAdmin(admin.ModelAdmin):
             raise
         obj.pk = mov.pk
         obj._state.adding = False
+
+
+class ConteoInline(admin.TabularInline):
+    model = ConteoAuditoria
+    fields = ["ubicacion", "variante", "contado", "actualizado_por", "actualizado"]
+    readonly_fields = fields
+    extra = 0
+    can_delete = False
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(Auditoria)
+class AuditoriaAdmin(admin.ModelAdmin):
+    """Historial de auditorías. Se hacen desde la app (pestaña Auditar)."""
+
+    list_display = ["creada", "zona", "estado", "creada_por", "duracion", "exactitud_col", "piezas_faltantes", "piezas_sobrantes"]
+    list_filter = ["estado", "zona"]
+    date_hierarchy = "creada"
+    readonly_fields = [
+        "zona", "estado", "creada_por", "creada", "terminada", "duracion", "aplicada_por", "aplicada",
+        "lineas", "lineas_con_diferencia", "exactitud_col", "piezas_faltantes", "piezas_sobrantes",
+    ]
+    fields = readonly_fields
+    inlines = [ConteoInline]
+
+    @admin.display(description="duración del conteo")
+    def duracion(self, obj):
+        return f"{obj.minutos} min" if obj.minutos is not None else "—"
+
+    @admin.display(description="exactitud")
+    def exactitud_col(self, obj):
+        return f"{obj.exactitud} %" if obj.exactitud is not None else "—"
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False

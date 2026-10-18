@@ -1,12 +1,15 @@
 """API REST que usa la app del celular (PWA)."""
 from django.db.models import Prefetch, Q
+from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
 from catalogo.models import Categoria, Marca, ModeloTelefono, Variante
 
-from .models import Existencia, Movimiento, Ubicacion
+from . import auditorias as aud
+from .models import Auditoria, Existencia, Movimiento, Ubicacion
 from .permisos import es_admin
 from .serializers import (
     AltaRapidaSerializer,
@@ -170,3 +173,128 @@ def crear_alta_rapida(request):
     except ErrorInventario as e:
         return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
     return Response({"variante": variante_data(request, variante.pk)}, status=status.HTTP_201_CREATED)
+
+
+# ---------- Auditoría ----------
+
+
+def _auditoria_data(request, auditoria):
+    """Detalle para la app. Mientras se cuenta es "a ciegas": no incluye el stock del sistema."""
+    admin = es_admin(request.user)
+    lineas = aud.lineas_auditoria(auditoria)
+    mostrar_sistema = admin and auditoria.estado == Auditoria.Estado.REVISION
+    datos_lineas = []
+    for l in lineas:
+        d = {
+            "variante_id": l["variante"].pk,
+            "descripcion": str(l["variante"]),
+            "codigo": l["variante"].codigo_barras,
+            "ubicacion_id": l["ubicacion"].pk,
+            "ubicacion": str(l["ubicacion"]),
+            "contado": l["contado"],
+            "contada": l["contada"],
+        }
+        if mostrar_sistema:
+            d.update(sistema=l["sistema"], diferencia=l["diferencia"])
+        datos_lineas.append(d)
+    r = aud.resumen(lineas)
+    if not mostrar_sistema:
+        r = {"lineas": r["lineas"], "contadas": r["contadas"]}
+    if auditoria.estado == Auditoria.Estado.APLICADA:
+        r = {"lineas": auditoria.lineas, "contadas": auditoria.lineas,
+             "con_diferencia": auditoria.lineas_con_diferencia,
+             "faltantes": auditoria.piezas_faltantes, "sobrantes": auditoria.piezas_sobrantes}
+    return {
+        "id": auditoria.pk,
+        "zona": auditoria.zona,
+        "estado": auditoria.estado,
+        "estado_texto": auditoria.get_estado_display(),
+        "creada": timezone.localtime(auditoria.creada).strftime("%d/%m/%Y %H:%M"),
+        "creada_por": auditoria.creada_por.get_username(),
+        "minutos": auditoria.minutos,
+        "es_admin": admin,
+        "ubicaciones": UbicacionSerializer(
+            Ubicacion.objects.filter(zona=auditoria.zona, activo=True), many=True
+        ).data,
+        "lineas": datos_lineas,
+        "resumen": r,
+    }
+
+
+def _ejecutar(request, auditoria, funcion, solo_admin=False):
+    if solo_admin and not es_admin(request.user):
+        return Response({"detail": "Solo un administrador puede hacer eso."}, status=status.HTTP_403_FORBIDDEN)
+    try:
+        resultado = funcion(auditoria=auditoria, usuario=request.user)
+    except ErrorInventario as e:
+        return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+    if isinstance(resultado, tuple):
+        resultado = resultado[0]
+    resultado.refresh_from_db()
+    return Response(_auditoria_data(request, resultado))
+
+
+@api_view(["GET", "POST"])
+def auditorias(request):
+    if request.method == "POST":
+        try:
+            a = aud.iniciar_auditoria(zona=request.data.get("zona"), usuario=request.user)
+        except ErrorInventario as e:
+            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(_auditoria_data(request, a), status=status.HTTP_201_CREATED)
+    en_curso = Auditoria.objects.filter(estado__in=aud.EN_CURSO).select_related("creada_por")
+    return Response({
+        "zonas": aud.zonas_disponibles(),
+        "en_curso": [
+            {"id": a.pk, "zona": a.zona, "estado": a.estado, "estado_texto": a.get_estado_display(),
+             "creada": timezone.localtime(a.creada).strftime("%d/%m %H:%M"), "creada_por": a.creada_por.get_username()}
+            for a in en_curso
+        ],
+    })
+
+
+@api_view(["GET"])
+def auditoria_detalle(request, pk):
+    return Response(_auditoria_data(request, get_object_or_404(Auditoria, pk=pk)))
+
+
+@api_view(["POST"])
+def auditoria_conteo(request, pk):
+    auditoria = get_object_or_404(Auditoria, pk=pk)
+    variante = aud.variante_por_id(request.data.get("variante"))
+    ubicacion = Ubicacion.objects.filter(pk=request.data.get("ubicacion"), activo=True).first()
+    if not variante or not ubicacion:
+        return Response({"detail": "Producto o ubicación no válidos."}, status=status.HTTP_400_BAD_REQUEST)
+    try:
+        sumar = request.data.get("sumar")
+        fijar = request.data.get("fijar")
+        conteo = aud.registrar_conteo(
+            auditoria=auditoria, variante=variante, ubicacion=ubicacion, usuario=request.user,
+            sumar=int(sumar) if sumar is not None else None,
+            fijar=int(fijar) if fijar is not None else None,
+        )
+    except (TypeError, ValueError):
+        return Response({"detail": "La cantidad debe ser un número entero."}, status=status.HTTP_400_BAD_REQUEST)
+    except ErrorInventario as e:
+        return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+    return Response({"descripcion": str(variante), "ubicacion": str(ubicacion), "contado": conteo.contado})
+
+
+@api_view(["POST"])
+def auditoria_terminar(request, pk):
+    return _ejecutar(request, get_object_or_404(Auditoria, pk=pk), aud.terminar_conteo)
+
+
+@api_view(["POST"])
+def auditoria_reabrir(request, pk):
+    return _ejecutar(request, get_object_or_404(Auditoria, pk=pk), aud.reabrir_auditoria, solo_admin=True)
+
+
+@api_view(["POST"])
+def auditoria_aplicar(request, pk):
+    return _ejecutar(request, get_object_or_404(Auditoria, pk=pk), aud.aplicar_auditoria, solo_admin=True)
+
+
+@api_view(["POST"])
+def auditoria_cancelar(request, pk):
+    return _ejecutar(request, get_object_or_404(Auditoria, pk=pk), aud.cancelar_auditoria, solo_admin=True)

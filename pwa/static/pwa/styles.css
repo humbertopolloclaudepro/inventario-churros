@@ -26,6 +26,8 @@
 }
 
 * { box-sizing: border-box; }
+/* Lo oculto siempre se oculta, aunque su clase le dé display: grid o flex */
+[hidden] { display: none !important; }
 
 body {
   margin: 0;
@@ -154,3 +156,21 @@ dialog::backdrop { background: rgb(0 0 0 / .45); }
   background: var(--ok);
 }
 .aviso.error { background: var(--error); }
+
+/* Auditoría */
+.aud-titulo { margin: 0; font-size: 20px; }
+.aud-caja { display: grid; gap: 6px; margin-top: 12px; font-size: 14px; color: var(--texto-suave); }
+.lector:not([hidden]) { margin-top: 12px; }
+.aud-grupo { background: var(--superficie); border: 1px solid var(--borde); border-radius: var(--radio); padding: 4px 14px; }
+.aud-grupo h3 { font-size: 15px; margin: 10px 0 4px; }
+.aud-linea { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-top: 1px solid var(--borde); }
+.aud-grupo h3 + .aud-linea { border-top: 0; }
+.aud-linea > div:first-child { min-width: 0; overflow-wrap: anywhere; }
+.aud-linea.contada b { color: var(--texto); }
+.contador { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.cifra { min-width: 44px; min-height: 44px; border: 0; background: none; font: inherit; font-size: 20px; font-weight: 700; color: var(--texto); cursor: pointer; }
+.dif { display: grid; justify-items: end; flex-shrink: 0; }
+.dif b { font-size: 18px; }
+.dif-neg { color: var(--error); }
+.dif-pos { color: var(--ok); }
+.resumen-aud li b { white-space: nowrap; }

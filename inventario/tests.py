@@ -344,6 +344,116 @@ class ReporteTests(Base):
         self.assertContains(self.client.get("/admin/catalogo/variante/"), "/reportes/inventario.pdf")
 
 
+class AuditoriaTests(Base):
+    """Escenario: el sistema dice 5 fundas negras en Cajonera 2 · Nivel B.
+    Al contar aparecen 3 negras, y 2 rojas que el sistema no tenía ahí."""
+
+    def setUp(self):
+        from inventario.models import Auditoria
+        self.Auditoria = Auditoria
+        self.entrada(5)
+        self.roja = Variante.objects.create(producto=self.variante.producto, color="Rojo", codigo_barras="7502", precio=250)
+        self.otra_zona = Ubicacion.objects.create(zona="Cajonera 1", nivel="A")
+        self.cliente = APIClient()
+
+    def api(self, usuario, metodo, ruta, datos=None):
+        self.cliente.force_authenticate(usuario)
+        return getattr(self.cliente, metodo)(f"/api/auditorias/{ruta}", datos or {}, format="json")
+
+    def contar(self, auditoria_id, variante, cantidad, usuario=None, modo="sumar", ubicacion=None):
+        return self.api(usuario or self.vendedor, "post", f"{auditoria_id}/conteo/", {
+            "variante": variante.pk, "ubicacion": (ubicacion or self.cajonera).pk, modo: cantidad,
+        })
+
+    def test_flujo_completo(self):
+        r = self.api(self.vendedor, "get", "")
+        self.assertEqual(r.data["zonas"], ["Cajonera 1", "Cajonera 2"])
+
+        r = self.api(self.vendedor, "post", "", {"zona": "Cajonera 2"})
+        self.assertEqual(r.status_code, 201)
+        aid = r.data["id"]
+        # A ciegas: se ve qué productos hay que contar, pero no cuántos dice el sistema
+        self.assertEqual(len(r.data["lineas"]), 1)
+        self.assertNotIn("sistema", r.data["lineas"][0])
+        # Iniciar otra vez la misma zona devuelve la misma auditoría
+        self.assertEqual(self.api(self.admin, "post", "", {"zona": "Cajonera 2"}).data["id"], aid)
+
+        for _ in range(3):  # tres escaneos de la funda negra
+            self.contar(aid, self.variante, 1)
+        self.assertEqual(self.contar(aid, self.roja, 2, modo="fijar").data["contado"], 2)
+
+        # No se puede contar en una caja de otra zona
+        r = self.contar(aid, self.variante, 1, ubicacion=self.otra_zona)
+        self.assertEqual(r.status_code, 400)
+
+        r = self.api(self.vendedor, "post", f"{aid}/terminar/")
+        self.assertEqual(r.data["estado"], "revision")
+        self.assertNotIn("con_diferencia", r.data["resumen"])  # el vendedor no ve las diferencias
+        self.assertEqual(self.contar(aid, self.variante, 1).status_code, 400)  # ya no se puede contar
+
+        # El administrador ve las diferencias
+        r = self.api(self.admin, "get", f"{aid}/")
+        self.assertEqual(r.data["resumen"], {"lineas": 2, "contadas": 2, "con_diferencia": 2, "faltantes": 2, "sobrantes": 2})
+        negra = next(l for l in r.data["lineas"] if l["variante_id"] == self.variante.pk)
+        self.assertEqual((negra["sistema"], negra["contado"], negra["diferencia"]), (5, 3, -2))
+
+        # El vendedor no puede aplicar
+        self.assertEqual(self.api(self.vendedor, "post", f"{aid}/aplicar/").status_code, 403)
+
+        r = self.api(self.admin, "post", f"{aid}/aplicar/")
+        self.assertEqual(r.status_code, 200, r.data)
+        self.assertEqual(r.data["estado"], "aplicada")
+        self.assertEqual(self.stock(), 3)
+        self.assertEqual(Existencia.objects.get(variante=self.roja, ubicacion=self.cajonera).cantidad, 2)
+        ajustes = Movimiento.objects.filter(tipo=T.AJUSTE, motivo=M.CONTEO)
+        self.assertEqual(sorted(ajustes.values_list("cantidad", flat=True)), [-2, 2])
+        a = self.Auditoria.objects.get(pk=aid)
+        self.assertEqual((a.lineas, a.lineas_con_diferencia, a.exactitud), (2, 2, 0.0))
+        # Aplicar dos veces no ajusta dos veces
+        self.assertEqual(self.api(self.admin, "post", f"{aid}/aplicar/").status_code, 400)
+        self.assertEqual(self.stock(), 3)
+
+    def test_lo_no_contado_cuenta_como_cero(self):
+        aid = self.api(self.vendedor, "post", "", {"zona": "Cajonera 2"}).data["id"]
+        self.api(self.vendedor, "post", f"{aid}/terminar/")
+        r = self.api(self.admin, "get", f"{aid}/")
+        self.assertEqual(r.data["resumen"]["faltantes"], 5)
+        self.api(self.admin, "post", f"{aid}/aplicar/")
+        self.assertEqual(self.stock(), 0)
+
+    def test_conteo_exacto_no_crea_ajustes(self):
+        aid = self.api(self.vendedor, "post", "", {"zona": "Cajonera 2"}).data["id"]
+        self.contar(aid, self.variante, 5, modo="fijar")
+        self.api(self.vendedor, "post", f"{aid}/terminar/")
+        self.api(self.admin, "post", f"{aid}/aplicar/")
+        self.assertFalse(Movimiento.objects.filter(tipo=T.AJUSTE).exists())
+        self.assertEqual(self.Auditoria.objects.get(pk=aid).exactitud, 100.0)
+
+    def test_reabrir_y_cancelar(self):
+        aid = self.api(self.vendedor, "post", "", {"zona": "Cajonera 2"}).data["id"]
+        self.api(self.vendedor, "post", f"{aid}/terminar/")
+        self.assertEqual(self.api(self.vendedor, "post", f"{aid}/reabrir/").status_code, 403)
+        self.assertEqual(self.api(self.admin, "post", f"{aid}/reabrir/").data["estado"], "abierta")
+        self.assertEqual(self.contar(aid, self.variante, 1).status_code, 200)  # se puede seguir contando
+        self.assertEqual(self.api(self.admin, "post", f"{aid}/cancelar/").data["estado"], "cancelada")
+        self.assertEqual(self.stock(), 5)
+        # Cancelada, se puede empezar una nueva en la misma zona
+        self.assertNotEqual(self.api(self.vendedor, "post", "", {"zona": "Cajonera 2"}).data["id"], aid)
+
+    def test_validaciones(self):
+        self.assertEqual(self.api(self.vendedor, "post", "", {"zona": "No existe"}).status_code, 400)
+        aid = self.api(self.vendedor, "post", "", {"zona": "Cajonera 2"}).data["id"]
+        self.assertEqual(self.contar(aid, self.variante, -1, modo="fijar").status_code, 400)
+        self.assertEqual(self.contar(aid, self.variante, "abc", modo="fijar").status_code, 400)
+
+    def test_panel_lista_auditorias(self):
+        aid = self.api(self.vendedor, "post", "", {"zona": "Cajonera 2"}).data["id"]
+        jefe = get_user_model().objects.create_superuser("jefe2", password="x")
+        self.client.force_login(jefe)
+        self.assertContains(self.client.get("/admin/inventario/auditoria/"), "Cajonera 2")
+        self.assertEqual(self.client.get(f"/admin/inventario/auditoria/{aid}/change/").status_code, 200)
+
+
 class PwaTests(Base):
     def test_app_requiere_login_y_carga(self):
         self.assertEqual(self.client.get("/app/").status_code, 302)

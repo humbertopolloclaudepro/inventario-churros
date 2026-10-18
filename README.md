@@ -5,7 +5,10 @@ App para saber **dónde está cada accesorio** en la tienda y **qué mercancía 
 - **App del celular** (`/app/`): buscar o escanear un producto y ver su ubicación ("Cajonera 2 · Nivel B"),
   registrar entradas y salidas, y dar de alta productos nuevos.
 - **Panel del dueño** (`/admin/`): catálogo, ubicaciones, historial de movimientos, radar de
-  obsolescencia (sin venta en 30/60/90 días), stock bajo y etiquetas QR en PDF.
+  obsolescencia (sin venta en 30/60/90 días), stock bajo, etiquetas QR, reporte PDF,
+  importación desde Excel e historial de auditorías.
+- **Auditoría** (pestaña *Auditar* de la app): se cuenta una zona escaneando cada caja y sus piezas;
+  un administrador revisa las diferencias y ajusta el inventario.
 
 Hecho con Django + Django REST Framework y una app web instalable (PWA).
 

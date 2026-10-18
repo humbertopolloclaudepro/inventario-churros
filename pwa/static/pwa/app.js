@@ -116,8 +116,10 @@ function actualizarVariante(v) {
 function mostrarVista(nombre) {
   $$(".vista").forEach((s) => s.classList.toggle("activa", s.id === `vista-${nombre}`));
   $$(".pestanas button").forEach((b) => b.classList.toggle("activa", b.dataset.vista === nombre));
-  if (nombre !== "escanear") detenerEscaner();
+  if (nombre !== "escanear") escaner.detener();
+  if (nombre !== "auditar") escanerAud.detener();
   if (nombre === "buscar") $("#q").focus();
+  if (nombre === "auditar") cargarAuditorias();
 }
 
 /* ---------- buscar ---------- */
@@ -145,59 +147,94 @@ async function buscar(q) {
   }
 }
 
+/* ---------- escáner (componente reutilizable) ---------- */
+
+class Escaner {
+  /**
+   * idContenedor: div donde se dibuja el video. boton: el botón que lo enciende/apaga.
+   * alLeer(codigo): qué hacer con cada código leído.
+   * continuo: si es true, la cámara sigue encendida y hace una pausa breve entre lecturas
+   *           (para contar varias piezas seguidas); si es false, se apaga al leer.
+   */
+  constructor(idContenedor, boton, alLeer, { continuo = false } = {}) {
+    this.id = idContenedor;
+    this.boton = boton;
+    this.textoBoton = boton.textContent;
+    this.alLeer = alLeer;
+    this.continuo = continuo;
+    this.lector = null;
+    this.activo = false;
+    this.pausado = false;
+  }
+
+  async alternar() {
+    return this.activo ? this.detener() : this.iniciar();
+  }
+
+  async iniciar() {
+    if (!window.Html5Qrcode) {
+      aviso("No se pudo cargar el lector de códigos. Revisa tu conexión.", "error");
+      return;
+    }
+    const F = window.Html5QrcodeSupportedFormats;
+    this.lector = this.lector || new window.Html5Qrcode(this.id, {
+      verbose: false,
+      formatsToSupport: [F.QR_CODE, F.EAN_13, F.EAN_8, F.UPC_A, F.UPC_E, F.CODE_128],
+    });
+    const contenedor = document.getElementById(this.id);
+    // Se muestra el contenedor ANTES de iniciar: el lector usa su ancho para dimensionar el video.
+    contenedor.hidden = false;
+    try {
+      await this.lector.start(
+        { facingMode: "environment" },
+        {
+          fps: 10,
+          // Recuadro guía proporcional a la pantalla (sirve en celular y en computadora).
+          qrbox: (ancho, alto) => ({
+            width: Math.max(160, Math.floor(Math.min(ancho * 0.8, 340))),
+            height: Math.max(100, Math.floor(Math.min(alto * 0.5, 200))),
+          }),
+        },
+        (texto) => this.leido(texto)
+      );
+      this.activo = true;
+      this.boton.textContent = "Detener cámara";
+    } catch (err) {
+      contenedor.hidden = true;
+      aviso(`No se pudo abrir la cámara: ${err}`, "error");
+    }
+  }
+
+  async detener() {
+    if (this.lector && this.activo) {
+      try { await this.lector.stop(); } catch { /* ya estaba detenido */ }
+    }
+    this.activo = false;
+    this.pausado = false;
+    document.getElementById(this.id).hidden = true;
+    this.boton.textContent = this.textoBoton;
+  }
+
+  async leido(texto) {
+    if (this.pausado) return;
+    if (navigator.vibrate) navigator.vibrate(80);
+    if (!this.continuo) {
+      await this.detener();
+    } else {
+      // Congela la imagen un momento: da tiempo de retirar la pieza y evita contarla dos veces.
+      this.pausado = true;
+      try { this.lector.pause(true); } catch { /* sin soporte de pausa */ }
+      setTimeout(() => {
+        if (!this.activo) return;
+        try { this.lector.resume(); } catch { /* ya se detuvo */ }
+        this.pausado = false;
+      }, 1200);
+    }
+    this.alLeer(texto.trim());
+  }
+}
+
 /* ---------- escanear ---------- */
-
-let lector = null;
-let escaneando = false;
-
-async function iniciarEscaner() {
-  if (escaneando) return detenerEscaner();
-  if (!window.Html5Qrcode) {
-    aviso("No se pudo cargar el lector de códigos. Revisa tu conexión.", "error");
-    return;
-  }
-  const F = window.Html5QrcodeSupportedFormats;
-  lector = lector || new window.Html5Qrcode("lector", {
-    verbose: false,
-    formatsToSupport: [F.QR_CODE, F.EAN_13, F.EAN_8, F.UPC_A, F.UPC_E, F.CODE_128],
-  });
-  // Se muestra el contenedor ANTES de iniciar: el lector usa su ancho para dimensionar el video.
-  $("#lector").hidden = false;
-  try {
-    await lector.start(
-      { facingMode: "environment" },
-      {
-        fps: 10,
-        // Recuadro guía proporcional a la pantalla (sirve en celular y en computadora).
-        qrbox: (ancho, alto) => ({
-          width: Math.max(160, Math.floor(Math.min(ancho * 0.8, 340))),
-          height: Math.max(100, Math.floor(Math.min(alto * 0.5, 200))),
-        }),
-      },
-      alLeer
-    );
-    escaneando = true;
-    $("#btn-escanear").textContent = "Detener cámara";
-  } catch (err) {
-    $("#lector").hidden = true;
-    aviso(`No se pudo abrir la cámara: ${err}`, "error");
-  }
-}
-
-async function detenerEscaner() {
-  if (lector && escaneando) {
-    try { await lector.stop(); } catch { /* ya estaba detenido */ }
-  }
-  escaneando = false;
-  $("#lector").hidden = true;
-  $("#btn-escanear").textContent = "Activar cámara";
-}
-
-async function alLeer(texto) {
-  await detenerEscaner();
-  if (navigator.vibrate) navigator.vibrate(80);
-  resolverCodigo(texto.trim());
-}
 
 async function resolverCodigo(codigo) {
   const cont = $("#resultado-escaneo");
@@ -230,7 +267,8 @@ async function resolverCodigo(codigo) {
   }
 }
 
-$("#btn-escanear").addEventListener("click", iniciarEscaner);
+const escaner = new Escaner("lector", $("#btn-escanear"), resolverCodigo);
+$("#btn-escanear").addEventListener("click", () => escaner.alternar());
 $("#form-codigo-manual").addEventListener("submit", (e) => {
   e.preventDefault();
   const codigo = $("#codigo-manual").value.trim();
@@ -380,6 +418,234 @@ function irAlta(codigo) {
   $("#resultado-alta").innerHTML = "";
   mostrarVista("alta");
 }
+
+/* ---------- auditoría ---------- */
+/* Contar una zona completa. Se escanea el QR de la caja y luego cada pieza que hay en ella.
+   El conteo es "a ciegas": la app no muestra cuántas piezas dice el sistema. */
+
+const aud = { actual: null, ubicacion: null };
+
+function mostrarPaso(paso) {
+  ["inicio", "conteo", "revision"].forEach((p) => { $(`#aud-${p}`).hidden = p !== paso; });
+}
+
+async function cargarAuditorias() {
+  try {
+    if (aud.actual) return mostrarAuditoria(await api(`auditorias/${aud.actual.id}/`));
+    const d = await api("auditorias/");
+    llenarSelect($("#aud-zona"), d.zonas.map((z) => ({ id: z, nombre: z })), { vacio: "Elige la zona a contar" });
+    $("#aud-pendientes").innerHTML = d.en_curso.length
+      ? "<h3>En curso</h3>" + d.en_curso.map((a) => `
+          <article class="tarjeta">
+            <h3>${esc(a.zona)}</h3>
+            <p class="sub">${esc(a.estado_texto)} · iniciada por ${esc(a.creada_por)} el ${esc(a.creada)}</p>
+            <div class="fila"><button class="boton" type="button" data-aud-abrir="${a.id}">
+              ${a.estado === "abierta" ? "Continuar conteo" : "Ver"}</button></div>
+          </article>`).join("")
+      : "";
+    mostrarPaso("inicio");
+  } catch (err) {
+    aviso(err.message, "error");
+  }
+}
+
+function mostrarAuditoria(d) {
+  aud.actual = d;
+  if (!d.ubicaciones.some((u) => u.id === aud.ubicacion)) aud.ubicacion = null;
+  if (d.estado === "abierta") pintarConteo(d);
+  else { escanerAud.detener(); pintarRevision(d); }
+}
+
+function pintarConteo(d) {
+  $("#aud-titulo").textContent = `Contando ${d.zona}`;
+  $("#aud-progreso").textContent = `${d.resumen.contadas} de ${d.resumen.lineas} productos contados`;
+  llenarSelect($("#aud-ubic"), d.ubicaciones, { seleccionado: aud.ubicacion, vacio: "Escanea el QR de la caja o elígela" });
+
+  const grupos = new Map();
+  d.lineas.forEach((l) => {
+    if (!grupos.has(l.ubicacion)) grupos.set(l.ubicacion, []);
+    grupos.get(l.ubicacion).push(l);
+  });
+  $("#aud-lineas").innerHTML = grupos.size
+    ? [...grupos].map(([ubic, lineas]) => `
+        <section class="aud-grupo">
+          <h3>${esc(ubic)}</h3>
+          ${lineas.map((l) => `
+            <div class="aud-linea${l.contada ? " contada" : ""}">
+              <div><b>${esc(l.descripcion)}</b><br><span class="sub">${esc(l.codigo)}</span></div>
+              <div class="contador" data-variante="${l.variante_id}" data-ubicacion="${l.ubicacion_id}">
+                <button type="button" class="boton chico" data-aud="menos" aria-label="Una menos">−</button>
+                <button type="button" class="cifra" data-aud="fijar" aria-label="Escribir cantidad">${l.contada ? l.contado : "—"}</button>
+                <button type="button" class="boton chico" data-aud="mas" aria-label="Una más">+</button>
+              </div>
+            </div>`).join("")}
+        </section>`).join("")
+    : '<p class="vacio">El sistema no tiene piezas en esta zona. Escanea lo que encuentres.</p>';
+  mostrarPaso("conteo");
+}
+
+function pintarRevision(d) {
+  const r = d.resumen;
+  let html = `<h2>${esc(d.zona)}</h2><p class="sub">${esc(d.estado_texto)}${d.minutos != null ? ` · conteo de ${d.minutos} min` : ""}</p>`;
+  const exactitud = (n) => (r.lineas ? Math.round((100 * (r.lineas - n)) / r.lineas) : 100);
+
+  if (d.estado === "revision" && !d.es_admin) {
+    html += '<p>Conteo enviado. Un administrador revisará las diferencias y ajustará el inventario.</p>';
+  } else if (d.estado === "revision") {
+    const difs = d.lineas.filter((l) => l.diferencia !== 0);
+    html += `
+      <ul class="ubicaciones resumen-aud">
+        <li><span>Productos revisados</span><b>${r.lineas}</b></li>
+        <li><span>Coinciden con el sistema</span><b>${r.lineas - r.con_diferencia} (${exactitud(r.con_diferencia)} %)</b></li>
+        <li><span>Piezas faltantes</span><b class="dif-neg">${r.faltantes}</b></li>
+        <li><span>Piezas sobrantes</span><b class="dif-pos">${r.sobrantes}</b></li>
+      </ul>
+      ${difs.length ? "<h3>Diferencias</h3>" : '<p class="vacio">Todo coincide. No hay nada que ajustar.</p>'}
+      ${difs.map((l) => `
+        <div class="aud-linea">
+          <div><b>${esc(l.descripcion)}</b><br><span class="sub">${esc(l.ubicacion)}${l.contada ? "" : " · no se contó"}</span></div>
+          <div class="dif">
+            <span class="sub">${l.sistema} → ${l.contado}</span>
+            <b class="${l.diferencia < 0 ? "dif-neg" : "dif-pos"}">${l.diferencia > 0 ? "+" : ""}${l.diferencia}</b>
+          </div>
+        </div>`).join("")}
+      <div class="fila"><button class="boton primario" type="button" data-aud-accion="aplicar">
+        ${difs.length ? "Aplicar ajustes" : "Cerrar auditoría"}</button></div>
+      <div class="fila">
+        <button class="boton" type="button" data-aud-accion="reabrir">Volver a contar</button>
+        <button class="boton" type="button" data-aud-accion="cancelar">Cancelar auditoría</button>
+      </div>`;
+  } else if (d.estado === "aplicada") {
+    html += `<p>El inventario de la zona quedó igual a lo contado.</p>
+      <ul class="ubicaciones resumen-aud">
+        <li><span>Exactitud</span><b>${exactitud(r.con_diferencia)} %</b></li>
+        <li><span>Piezas faltantes ajustadas</span><b>${r.faltantes}</b></li>
+        <li><span>Piezas sobrantes ajustadas</span><b>${r.sobrantes}</b></li>
+      </ul>`;
+  } else {
+    html += "<p>Esta auditoría se canceló; el inventario no cambió.</p>";
+  }
+  html += '<div class="fila"><button class="boton" type="button" data-aud-accion="salir">Volver</button></div>';
+  $("#aud-revision").innerHTML = html;
+  mostrarPaso("revision");
+}
+
+async function contar(variante, ubicacion, cambio) {
+  try {
+    const r = await api(`auditorias/${aud.actual.id}/conteo/`, {
+      method: "POST",
+      body: { variante, ubicacion, ...cambio },
+    });
+    if (cambio.sumar) aviso(`+${cambio.sumar} ${r.descripcion} → ${r.contado}`);
+    mostrarAuditoria(await api(`auditorias/${aud.actual.id}/`));
+  } catch (err) {
+    aviso(err.message, "error");
+  }
+}
+
+async function contarCodigo(codigo) {
+  if (!aud.actual || aud.actual.estado !== "abierta" || !codigo) return;
+  let d;
+  try {
+    d = await api(`codigo/?c=${encodeURIComponent(codigo)}`);
+  } catch (err) {
+    aviso(err.status === 404 ? `El código ${codigo} no está registrado. Apártalo y dalo de alta después.` : err.message, "error");
+    return;
+  }
+  if (d.tipo === "ubicacion") {
+    if (d.ubicacion.zona !== aud.actual.zona) {
+      aviso(`${d.ubicacion.nombre} no es de ${aud.actual.zona}.`, "error");
+      return;
+    }
+    aud.ubicacion = d.ubicacion.id;
+    $("#aud-ubic").value = String(aud.ubicacion);
+    aviso(`Contando en ${d.ubicacion.nombre}`);
+    return;
+  }
+  if (!aud.ubicacion) {
+    aviso("Primero escanea el QR de la caja, o elígela en la lista.", "error");
+    return;
+  }
+  await contar(d.variante.id, aud.ubicacion, { sumar: 1 });
+}
+
+const escanerAud = new Escaner("lector-aud", $("#aud-camara"), contarCodigo, { continuo: true });
+$("#aud-camara").addEventListener("click", () => escanerAud.alternar());
+
+$("#aud-ubic").addEventListener("change", (e) => { aud.ubicacion = Number(e.target.value) || null; });
+
+$("#aud-empezar").addEventListener("click", async () => {
+  const zona = $("#aud-zona").value;
+  if (!zona) return aviso("Elige la zona que vas a contar.", "error");
+  try {
+    aud.ubicacion = null;
+    mostrarAuditoria(await api("auditorias/", { method: "POST", body: { zona } }));
+  } catch (err) {
+    aviso(err.message, "error");
+  }
+});
+
+$("#aud-manual").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const campo = $("#aud-codigo");
+  contarCodigo(campo.value.trim());
+  campo.value = "";
+});
+
+$("#aud-terminar").addEventListener("click", async () => {
+  const faltan = aud.actual.resumen.lineas - aud.actual.resumen.contadas;
+  if (faltan > 0 && !confirm(`Hay ${faltan} producto(s) sin contar. Se tomarán como 0 piezas. ¿Terminar el conteo?`)) return;
+  try {
+    mostrarAuditoria(await api(`auditorias/${aud.actual.id}/terminar/`, { method: "POST" }));
+  } catch (err) {
+    aviso(err.message, "error");
+  }
+});
+
+$("#aud-salir").addEventListener("click", () => {
+  escanerAud.detener();
+  aud.actual = null;
+  cargarAuditorias();
+});
+
+$("#vista-auditar").addEventListener("click", async (e) => {
+  const abrir = e.target.closest("[data-aud-abrir]");
+  if (abrir) {
+    try { mostrarAuditoria(await api(`auditorias/${abrir.dataset.audAbrir}/`)); } catch (err) { aviso(err.message, "error"); }
+    return;
+  }
+
+  const boton = e.target.closest("[data-aud]");
+  if (boton) {
+    const c = boton.closest(".contador");
+    const variante = Number(c.dataset.variante), ubicacion = Number(c.dataset.ubicacion);
+    const linea = aud.actual.lineas.find((l) => l.variante_id === variante && l.ubicacion_id === ubicacion);
+    if (boton.dataset.aud === "mas") return contar(variante, ubicacion, { sumar: 1 });
+    if (boton.dataset.aud === "menos") return contar(variante, ubicacion, { fijar: Math.max(0, linea.contado - 1) });
+    const n = prompt(`¿Cuántas piezas de "${linea.descripcion}" contaste?`, linea.contada ? linea.contado : "");
+    if (n === null || n.trim() === "") return;
+    if (!/^\d+$/.test(n.trim())) return aviso("Escribe un número entero.", "error");
+    return contar(variante, ubicacion, { fijar: Number(n) });
+  }
+
+  const accion = e.target.closest("[data-aud-accion]")?.dataset.audAccion;
+  if (!accion) return;
+  if (accion === "salir") {
+    aud.actual = null;
+    return cargarAuditorias();
+  }
+  const preguntas = {
+    aplicar: "Se ajustará el inventario de la zona para que quede igual a lo contado. ¿Continuar?",
+    cancelar: "Se descartará este conteo y el inventario no cambiará. ¿Cancelar la auditoría?",
+  };
+  if (preguntas[accion] && !confirm(preguntas[accion])) return;
+  try {
+    mostrarAuditoria(await api(`auditorias/${aud.actual.id}/${accion}/`, { method: "POST" }));
+    if (accion === "aplicar") aviso("Ajustes aplicados.");
+  } catch (err) {
+    aviso(err.message, "error");
+  }
+});
 
 /* ---------- eventos globales ---------- */
 

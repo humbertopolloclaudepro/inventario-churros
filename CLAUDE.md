@@ -23,7 +23,9 @@ iteración 9–13 nov, prueba final 17–20 nov.
   reglas de negocio (`services.py`), API para la app (`api.py`, `api_urls.py`), etiquetas QR (`etiquetas.py`),
   reporte PDF por categoría (`reportes.py` sin Django + `views.py`, en `/reportes/inventario.pdf`),
   importación desde Excel/CSV (`importacion.py`: leer y validar sin Django, `importar_filas` guarda;
-  la usan la página `/admin/importar/` y el comando `importar_catalogo`).
+  la usan la página `/admin/importar/` y el comando `importar_catalogo`),
+  auditoría de inventario (`auditorias.py`: modelos Auditoria/ConteoAuditoria; se cuenta a ciegas desde la app,
+  pestaña Auditar, y un administrador aplica los ajustes con motivo "conteo").
 - `pwa/` — la app del celular: una sola página (`templates/pwa/app.html` + `static/pwa/app.js`),
   JavaScript sin frameworks, escáner con html5-qrcode, instalable en Android.
 
@@ -68,7 +70,9 @@ python manage.py importar_catalogo archivo.xlsx --usuario admin --prueba  # revi
 - P0 (piloto): catálogo + importación CSV, ubicaciones con QR, buscador espacial, escaneo,
   entradas/salidas, alta rápida desde la app (vendedores incluidos), roles, trazabilidad,
   radar de obsolescencia 30/60/90 días, etiquetas QR en PDF.
+- Hecho después del MVP: reporte PDF por categoría, importación desde Excel en el panel, cambio de contraseña,
+  botón Panel en la app, auditoría por zona.
 - P1 (iteración): cola offline de movimientos en IndexedDB (ver TODO en `pwa/templates/pwa/sw.js`),
   alerta de stock bajo (ya existe como filtro en el admin; falta avisar en la app).
-- Fuera: auditoría cíclica (solo si sobra tiempo), rol almacenista, dashboard propio con gráficas,
+- Fuera: rol almacenista, dashboard propio con gráficas,
   sugerencias de reabastecimiento, sincronización en tiempo real, integración con punto de venta.

@@ -81,12 +81,44 @@
       </form>
       <div id="resultado-alta" class="lista"></div>
     </section>
+
+    <!-- AUDITORÍA -->
+    <section id="vista-auditar" class="vista">
+      <div id="aud-inicio" class="formulario">
+        <h2>Auditoría</h2>
+        <p class="sub">Cuenta todo lo que hay en una zona. Al terminar, un administrador revisa las diferencias y ajusta el inventario.</p>
+        <label>Zona <select id="aud-zona"></select></label>
+        <button id="aud-empezar" class="boton primario" type="button">Empezar conteo</button>
+        <div id="aud-pendientes" class="lista"></div>
+      </div>
+
+      <div id="aud-conteo" hidden>
+        <h2 id="aud-titulo" class="aud-titulo"></h2>
+        <p id="aud-progreso" class="sub"></p>
+        <label class="aud-caja">Caja que estás contando <select id="aud-ubic"></select></label>
+        <div id="lector-aud" class="lector" hidden></div>
+        <div class="fila"><button id="aud-camara" class="boton primario" type="button">Escanear</button></div>
+        <form id="aud-manual" class="fila">
+          <input id="aud-codigo" placeholder="o teclea el código" autocomplete="off">
+          <button class="boton" type="submit">Contar</button>
+        </form>
+        <p class="sub">Escanea el QR de la caja y después cada pieza que hay dentro. Usa − y + para corregir.</p>
+        <div id="aud-lineas" class="lista"></div>
+        <div class="fila">
+          <button id="aud-salir" class="boton" type="button">Salir</button>
+          <button id="aud-terminar" class="boton primario" type="button">Terminar conteo</button>
+        </div>
+      </div>
+
+      <div id="aud-revision" class="formulario" hidden></div>
+    </section>
   </main>
 
   <nav class="pestanas">
     <button data-vista="buscar" class="activa" type="button">Buscar</button>
     <button data-vista="escanear" type="button">Escanear</button>
     <button data-vista="alta" type="button">Alta</button>
+    <button data-vista="auditar" type="button">Auditar</button>
   </nav>
 
   <!-- Diálogo de movimiento (entrada / salida) -->

@@ -106,3 +106,74 @@ class Movimiento(models.Model):
 
     def delete(self, *args, **kwargs):
         raise ValidationError("Los movimientos no se eliminan; registra un ajuste.")
+
+
+class Auditoria(models.Model):
+    """Conteo físico de una zona (p. ej. "Cajonera 2") para comparar contra el sistema.
+
+    Flujo: abierta (se cuenta en la app) -> revision (el conteo terminó)
+           -> aplicada (el administrador ajustó el stock) o cancelada.
+    """
+
+    class Estado(models.TextChoices):
+        ABIERTA = "abierta", "En conteo"
+        REVISION = "revision", "Por revisar"
+        APLICADA = "aplicada", "Aplicada"
+        CANCELADA = "cancelada", "Cancelada"
+
+    zona = models.CharField(max_length=60)
+    estado = models.CharField(max_length=10, choices=Estado.choices, default=Estado.ABIERTA, db_index=True)
+    creada_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="+")
+    creada = models.DateTimeField(default=timezone.now)
+    terminada = models.DateTimeField(null=True, blank=True, help_text="Cuando se terminó de contar.")
+    aplicada_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True, related_name="+"
+    )
+    aplicada = models.DateTimeField(null=True, blank=True)
+    # Resultado guardado al aplicar (después el stock cambia y ya no se puede recalcular)
+    lineas = models.PositiveIntegerField(default=0, help_text="Productos revisados en la zona.")
+    lineas_con_diferencia = models.PositiveIntegerField(default=0)
+    piezas_faltantes = models.PositiveIntegerField(default=0)
+    piezas_sobrantes = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ["-creada"]
+        verbose_name = "auditoría"
+        verbose_name_plural = "auditorías"
+
+    def __str__(self):
+        return f"Auditoría {self.zona} · {timezone.localtime(self.creada):%d/%m/%Y %H:%M}"
+
+    @property
+    def minutos(self):
+        """Duración del conteo en minutos (de que empezó a que se terminó)."""
+        if not self.terminada:
+            return None
+        return round((self.terminada - self.creada).total_seconds() / 60)
+
+    @property
+    def exactitud(self):
+        """Porcentaje de productos cuyo conteo coincidió con el sistema (solo auditorías aplicadas)."""
+        if not self.lineas:
+            return None
+        return round(100 * (self.lineas - self.lineas_con_diferencia) / self.lineas, 1)
+
+
+class ConteoAuditoria(models.Model):
+    """Cuántas piezas se contaron de una variante en una ubicación durante una auditoría."""
+
+    auditoria = models.ForeignKey(Auditoria, on_delete=models.CASCADE, related_name="conteos")
+    variante = models.ForeignKey(Variante, on_delete=models.PROTECT, related_name="+")
+    ubicacion = models.ForeignKey(Ubicacion, on_delete=models.PROTECT, related_name="+")
+    contado = models.PositiveIntegerField(default=0)
+    actualizado = models.DateTimeField(auto_now=True)
+    actualizado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="+")
+
+    class Meta:
+        verbose_name = "conteo"
+        constraints = [
+            models.UniqueConstraint(fields=["auditoria", "variante", "ubicacion"], name="conteo_unico"),
+        ]
+
+    def __str__(self):
+        return f"{self.variante} en {self.ubicacion}: {self.contado}"
