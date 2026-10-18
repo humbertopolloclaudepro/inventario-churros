@@ -1,0 +1,19 @@
+{% load static %}<!doctype html>
+<html lang="es-MX">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#b45309">
+  <title>Contraseña cambiada · Inventario</title>
+  <link rel="stylesheet" href="{% static 'pwa/styles.css' %}">
+</head>
+<body>
+  <main>
+    <div class="formulario tarjeta">
+      <h2>Listo</h2>
+      <p>Tu contraseña se cambió. La próxima vez que entres, usa la nueva.</p>
+      <a class="boton primario" href="{% url 'app' %}">Volver a la app</a>
+    </div>
+  </main>
+</body>
+</html>

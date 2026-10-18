@@ -1,0 +1,42 @@
+{% load static %}<!doctype html>
+<html lang="es-MX">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#b45309">
+  <title>Cambiar contraseña · Inventario</title>
+  <link rel="stylesheet" href="{% static 'pwa/styles.css' %}">
+</head>
+<body>
+  <header class="barra">
+    <a class="enlace" href="{% url 'app' %}">‹ Volver</a>
+    <strong>Cambiar contraseña</strong>
+  </header>
+  <main>
+    <form method="post" class="formulario tarjeta">
+      {% csrf_token %}
+      <p class="sub">Usuario: <b>{{ request.user.get_username }}</b></p>
+
+      {% if form.non_field_errors %}<p class="error-campo">{{ form.non_field_errors|join:" " }}</p>{% endif %}
+
+      <label>Contraseña actual
+        <input name="old_password" type="password" autocomplete="current-password" required autofocus>
+      </label>
+      {% for e in form.old_password.errors %}<p class="error-campo">{{ e }}</p>{% endfor %}
+
+      <label>Contraseña nueva
+        <input name="new_password1" type="password" autocomplete="new-password" required>
+      </label>
+      {% for e in form.new_password1.errors %}<p class="error-campo">{{ e }}</p>{% endfor %}
+      <p class="sub">Mínimo 8 caracteres. No puede ser solo números, ni muy común, ni parecida a tu usuario.</p>
+
+      <label>Repite la contraseña nueva
+        <input name="new_password2" type="password" autocomplete="new-password" required>
+      </label>
+      {% for e in form.new_password2.errors %}<p class="error-campo">{{ e }}</p>{% endfor %}
+
+      <button class="boton primario" type="submit">Guardar contraseña</button>
+    </form>
+  </main>
+</body>
+</html>

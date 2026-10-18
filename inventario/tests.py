@@ -354,6 +354,30 @@ class PwaTests(Base):
         self.assertEqual(self.client.get("/sw.js").status_code, 200)
         self.assertEqual(self.client.get("/manifest.webmanifest").status_code, 200)
 
+    def test_cambiar_contrasena(self):
+        self.assertEqual(self.client.get("/cuenta/contrasena/").status_code, 302)  # pide sesión
+        self.client.force_login(self.vendedor)
+        self.assertContains(self.client.get("/app/"), 'href="/cuenta/contrasena/"')
+        self.assertContains(self.client.get("/cuenta/contrasena/"), "Contraseña actual")
+
+        # Contraseña actual equivocada: no cambia nada
+        r = self.client.post("/cuenta/contrasena/", {
+            "old_password": "equivocada", "new_password1": "Churros-2026!", "new_password2": "Churros-2026!",
+        })
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(r.context["form"].errors)
+        self.vendedor.refresh_from_db()
+        self.assertTrue(self.vendedor.check_password("x"))
+
+        # Correcta: cambia y la sesión sigue abierta
+        r = self.client.post("/cuenta/contrasena/", {
+            "old_password": "x", "new_password1": "Churros-2026!", "new_password2": "Churros-2026!",
+        })
+        self.assertRedirects(r, "/cuenta/contrasena/listo/")
+        self.vendedor.refresh_from_db()
+        self.assertTrue(self.vendedor.check_password("Churros-2026!"))
+        self.assertEqual(self.client.get("/app/").status_code, 200)
+
     def test_boton_panel_solo_para_administradores(self):
         self.client.force_login(self.vendedor)
         self.assertNotContains(self.client.get("/app/"), 'href="/admin/"')

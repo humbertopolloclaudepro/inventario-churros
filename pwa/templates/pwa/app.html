@@ -13,7 +13,7 @@
 <body data-admin="{{ es_admin|yesno:'1,0' }}">
   <header class="barra">
     <strong>Inventario</strong>
-    <span class="usuario">{{ request.user.get_username }}{% if es_admin %} · Admin{% endif %}</span>
+    <a class="usuario" href="{% url 'cambiar-contrasena' %}" title="Cambiar contraseña">{{ request.user.get_username }}{% if es_admin %} · Admin{% endif %}</a>
     {% if es_admin and request.user.is_staff %}<a class="enlace" href="{% url 'admin:index' %}">Panel</a>{% endif %}
     <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="enlace" type="submit">Salir</button></form>
   </header>
