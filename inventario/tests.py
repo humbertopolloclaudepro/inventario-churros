@@ -353,3 +353,13 @@ class PwaTests(Base):
         self.assertNotContains(r, 'name="costo"')
         self.assertEqual(self.client.get("/sw.js").status_code, 200)
         self.assertEqual(self.client.get("/manifest.webmanifest").status_code, 200)
+
+    def test_boton_panel_solo_para_administradores(self):
+        self.client.force_login(self.vendedor)
+        self.assertNotContains(self.client.get("/app/"), 'href="/admin/"')
+        self.admin.is_staff = True
+        self.admin.save()
+        self.client.force_login(self.admin)
+        r = self.client.get("/app/")
+        self.assertContains(r, 'href="/admin/"')
+        self.assertContains(r, ">Panel<")

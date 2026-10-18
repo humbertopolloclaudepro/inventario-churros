@@ -47,6 +47,7 @@ body {
 .barra .usuario { margin-left: auto; color: var(--texto-suave); font-size: 14px; }
 .barra form { margin: 0; }
 .enlace { background: none; border: 0; color: var(--acento); font: inherit; padding: 4px; cursor: pointer; }
+a.enlace { text-decoration: none; font-weight: 600; }
 
 main { padding: 16px; max-width: 640px; margin: 0 auto; }
 .vista { display: none; }

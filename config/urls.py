@@ -8,6 +8,7 @@ admin.site.site_header = "Los Churros Rellenos · Inventario"
 admin.site.site_title = "Inventario"
 admin.site.index_title = "Panel del dueño"
 admin.site.index_template = "admin/index_churros.html"  # agrega la sección de Herramientas
+admin.site.site_url = "/app/"  # "Ver el sitio" en el panel regresa a la app
 
 urlpatterns = [
     # Antes de admin.site.urls para que estas rutas del panel no las tome el admin.
