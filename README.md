@@ -38,8 +38,9 @@ Abre http://127.0.0.1:8000/admin/ (panel) y http://127.0.0.1:8000/app/ (app).
 python manage.py importar_catalogo docs/plantilla_catalogo.csv --usuario <tu-usuario>
 ```
 
-Para la tienda real: en Excel, acomoda las columnas como en `docs/plantilla_catalogo.csv` y usa
-*Archivo > Guardar como > CSV UTF-8*. Prueba primero con `--prueba` para validar sin guardar.
+Para la tienda real, lo más fácil es el panel: **Herramientas > Importar inventario desde Excel**.
+Ahí se descarga la plantilla, se sube el `.xlsx` y se revisan los errores antes de guardar.
+Desde la consola también funciona con `.xlsx` o `.csv`; usa `--prueba` para revisar sin guardar.
 
 ### Usuarios
 

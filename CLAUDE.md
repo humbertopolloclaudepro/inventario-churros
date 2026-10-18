@@ -21,7 +21,9 @@ iteración 9–13 nov, prueba final 17–20 nov.
   El admin de esta app es el **dashboard del dueño** (radar, stock bajo, etiquetas).
 - `inventario/` — Ubicacion, Existencia (stock por variante y ubicación), Movimiento (inmutable),
   reglas de negocio (`services.py`), API para la app (`api.py`, `api_urls.py`), etiquetas QR (`etiquetas.py`),
-  reporte PDF por categoría (`reportes.py` sin Django + `views.py`, en `/reportes/inventario.pdf`).
+  reporte PDF por categoría (`reportes.py` sin Django + `views.py`, en `/reportes/inventario.pdf`),
+  importación desde Excel/CSV (`importacion.py`: leer y validar sin Django, `importar_filas` guarda;
+  la usan la página `/admin/importar/` y el comando `importar_catalogo`).
 - `pwa/` — la app del celular: una sola página (`templates/pwa/app.html` + `static/pwa/app.js`),
   JavaScript sin frameworks, escáner con html5-qrcode, instalable en Android.
 
@@ -58,7 +60,7 @@ python manage.py crear_roles
 python manage.py createsuperuser
 python manage.py runserver
 python manage.py test
-python manage.py importar_catalogo archivo.csv --usuario admin --prueba   # validar sin guardar
+python manage.py importar_catalogo archivo.xlsx --usuario admin --prueba  # revisar sin guardar
 ```
 
 ## Alcance

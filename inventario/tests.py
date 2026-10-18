@@ -222,6 +222,87 @@ class ImportarTests(TestCase):
         self.assertEqual(sum(Existencia.objects.values_list("cantidad", flat=True)), 35)
 
 
+def excel_bytes(filas):
+    from io import BytesIO
+
+    from openpyxl import Workbook
+    libro = Workbook()
+    for fila in filas:
+        libro.active.append(fila)
+    salida = BytesIO()
+    libro.save(salida)
+    return salida.getvalue()
+
+
+ENCABEZADOS = ["Categoría", "Marca", "Modelo", "Producto", "Color", "Material", "Código de barras",
+               "Precio", "Costo", "Stock mínimo", "Zona", "Nivel", "Caja", "Cantidad"]
+
+
+class ImportarWebTests(Base):
+    def setUp(self):
+        self.admin.is_staff = True
+        self.admin.save()
+        self.client.force_login(self.admin)
+
+    def subir(self, filas, nombre="inventario.xlsx"):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        archivo = SimpleUploadedFile(nombre, excel_bytes([ENCABEZADOS, *filas]))
+        return self.client.post("/admin/importar/", {"archivo": archivo})
+
+    def test_pagina_y_plantilla(self):
+        self.assertContains(self.client.get("/admin/importar/"), "Descargar plantilla")
+        r = self.client.get("/admin/importar/plantilla.xlsx")
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(r.content.startswith(b"PK"))  # un .xlsx es un zip
+
+    def test_revisar_no_guarda_y_confirmar_si(self):
+        r = self.subir([
+            ["Micas", "Samsung", "Galaxy S24", "Mica 9H", "", "Cristal", 7509990001112, 150, 40, 3, "Cajonera 4", "B", "", 6],
+            ["Micas", "Samsung", "Galaxy S24", "Mica privacidad", "", "Cristal", "", "$180.00", 60, 2, "Cajonera 4", "B", "", 0],
+        ])
+        self.assertContains(r, "Confirmar e importar")
+        self.assertEqual(r.context["resultado"].piezas, 6)
+        self.assertFalse(Variante.objects.filter(codigo_barras="7509990001112").exists())  # aún no se guarda
+
+        r = self.client.post("/admin/importar/", {"accion": "confirmar"})
+        self.assertRedirects(r, "/admin/catalogo/variante/", fetch_redirect_response=False)
+        v = Variante.objects.get(codigo_barras="7509990001112")
+        self.assertEqual(Existencia.objects.get(variante=v).cantidad, 6)
+        self.assertEqual(Variante.objects.get(producto__nombre="Mica privacidad").precio, 180)
+
+        # Confirmar otra vez no vuelve a importar
+        r = self.client.post("/admin/importar/", {"accion": "confirmar"})
+        self.assertEqual(r.status_code, 302)
+        self.assertEqual(Existencia.objects.get(variante=v).cantidad, 6)
+
+    def test_errores_se_muestran_y_no_se_guarda_nada(self):
+        antes = Variante.objects.count()
+        r = self.subir([
+            ["Fundas", "Apple", "", "Funda", "", "", "", 100, 10, 1, "", "", "", 0],
+            ["Fundas", "Apple", "iPhone 16", "Funda", "", "", "", "abc", 10, 1, "", "", "", 3],
+        ])
+        self.assertContains(r, "falta &#x27;modelo&#x27;")
+        self.assertContains(r, "No se guardó nada")
+        self.assertEqual(len(r.context["resultado"].errores), 3)
+        self.assertNotContains(r, "Confirmar e importar")
+        self.assertEqual(Variante.objects.count(), antes)
+        r = self.client.post("/admin/importar/", {"accion": "confirmar"})
+        self.assertEqual(Variante.objects.count(), antes)
+
+    def test_archivo_invalido(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        r = self.client.post("/admin/importar/", {"archivo": SimpleUploadedFile("foto.jpg", b"xx")})
+        self.assertContains(r, "Sube un archivo .xlsx")
+
+    def test_solo_administradores(self):
+        self.client.force_login(self.vendedor)
+        r = self.client.get("/admin/importar/")
+        self.assertEqual(r.status_code, 302)  # al login del panel
+        self.vendedor.is_staff = True
+        self.vendedor.save()
+        self.assertEqual(self.client.get("/admin/importar/").status_code, 403)
+
+
 class ReporteTests(Base):
     def test_requiere_sesion(self):
         r = self.client.get("/reportes/inventario.pdf")

@@ -1,12 +1,16 @@
 {% extends "admin/index.html" %}
-{% comment %}Página inicial del panel: igual a la de Django, con una sección de Reportes arriba.{% endcomment %}
+{% comment %}Página inicial del panel: igual a la de Django, con una sección de Herramientas arriba.{% endcomment %}
 {% block content %}
 <div id="content-main">
   <div class="app-reportes module">
     <table>
-      <caption>Reportes</caption>
+      <caption>Herramientas</caption>
       <tr>
         <th scope="row"><a href="{% url 'reporte-inventario' %}" target="_blank" rel="noopener">Inventario actual por categoría (PDF)</a></th>
+        <td></td>
+      </tr>
+      <tr>
+        <th scope="row"><a href="{% url 'importar-inventario' %}">Importar inventario desde Excel</a></th>
         <td></td>
       </tr>
     </table>

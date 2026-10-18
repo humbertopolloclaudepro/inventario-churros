@@ -1,0 +1,99 @@
+{% extends "admin/base_site.html" %}
+{% block title %}Importar inventario | {{ site_title }}{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">Inicio</a> › Importar inventario
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+  <style>
+    .importar p, .importar li { max-width: 760px; }
+    .importar .resumen td { text-align: right; font-weight: 600; }
+    .importar .resumen th { width: 240px; }
+    .importar table.errores td:first-child { white-space: nowrap; font-weight: 600; }
+    .importar .acciones { display: flex; gap: 12px; align-items: center; margin: 16px 0; flex-wrap: wrap; }
+    .importar input[type=file] { padding: 8px 0; }
+  </style>
+
+  <div class="importar">
+    {% if not resultado %}
+      <p>Sube el inventario en Excel (<b>.xlsx</b>) o CSV. Primero verás una revisión con los errores que tenga el archivo;
+         <b>nada se guarda hasta que confirmes</b>.</p>
+      <ul>
+        <li>Obligatorias: <b>categoria, marca, modelo, producto</b>. Las demás columnas son opcionales.</li>
+        <li>Si una fila trae <b>cantidad</b>, también necesita <b>zona</b> (dónde se guardan las piezas).</li>
+        <li>Los productos que ya existen no suman piezas otra vez; para eso registra una entrada.</li>
+      </ul>
+      <p><a class="button" href="{% url 'plantilla-importacion' %}">Descargar plantilla de Excel</a></p>
+    {% endif %}
+
+    {% if error_archivo %}
+      <p class="errornote">{{ error_archivo }}</p>
+    {% endif %}
+
+    {% if resultado %}
+      <h2>Revisión de “{{ nombre_archivo }}”</h2>
+
+      {% if resultado.errores %}
+        <p class="errornote">
+          El archivo tiene {{ resultado.errores|length }} error{{ resultado.errores|length|pluralize:"es" }}.
+          No se guardó nada. Corrígelo en Excel y vuelve a subirlo.
+        </p>
+        <div class="module">
+          <table class="errores" style="width:100%">
+            <thead><tr><th>Fila</th><th>Problema</th></tr></thead>
+            <tbody>
+              {% for fila, mensaje in resultado.errores|slice:":300" %}
+                <tr><td>{{ fila }}</td><td>{{ mensaje }}</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+          {% if resultado.errores|length > 300 %}<p>… y {{ resultado.errores|length|add:"-300" }} más.</p>{% endif %}
+        </div>
+      {% else %}
+        <p>El archivo está correcto. Esto es lo que se va a guardar:</p>
+        <div class="module" style="max-width:480px">
+          <table class="resumen" style="width:100%">
+            <tr><th>Productos nuevos</th><td>{{ resultado.variantes_nuevas }}</td></tr>
+            <tr><th>Productos que ya existían</th><td>{{ resultado.variantes_existentes }}</td></tr>
+            <tr><th>Ubicaciones nuevas</th><td>{{ resultado.ubicaciones_nuevas }}</td></tr>
+            <tr><th>Piezas que entran al inventario</th><td>{{ resultado.piezas }}</td></tr>
+          </table>
+        </div>
+
+        {% if resultado.avisos %}
+          <h3>Avisos ({{ resultado.avisos|length }})</h3>
+          <div class="module">
+            <table class="errores" style="width:100%">
+              <thead><tr><th>Fila</th><th>Aviso</th></tr></thead>
+              <tbody>
+                {% for fila, mensaje in resultado.avisos|slice:":300" %}
+                  <tr><td>{{ fila }}</td><td>{{ mensaje }}</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% endif %}
+
+        <form method="post" class="acciones">
+          {% csrf_token %}
+          <input type="hidden" name="accion" value="confirmar">
+          <input type="submit" class="default" value="Confirmar e importar">
+          <a href="{% url 'importar-inventario' %}">Cancelar</a>
+        </form>
+      {% endif %}
+    {% endif %}
+
+    {% if not resultado or resultado.errores %}
+      <form method="post" enctype="multipart/form-data" class="acciones">
+        {% csrf_token %}
+        <input type="file" name="archivo" accept=".xlsx,.csv" required>
+        <input type="submit" class="default" value="Revisar archivo">
+      </form>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
