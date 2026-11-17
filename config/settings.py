@@ -98,6 +98,9 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
 }
 
+# Código que pide "Crear nueva cuenta" en la app. Vacío = registro cerrado (solo el admin crea usuarios).
+CODIGO_REGISTRO = os.environ.get("CODIGO_REGISTRO", "").strip()
+
 LOGIN_URL = "/login/"
 LOGIN_REDIRECT_URL = "/app/"
 LOGOUT_REDIRECT_URL = "/login/"

@@ -41,13 +41,21 @@ class VarianteSerializer(serializers.ModelSerializer):
     modelo = serializers.CharField(source="producto.modelo_telefono.nombre", read_only=True)
     stock_total = serializers.SerializerMethodField()
     existencias = serializers.SerializerMethodField()
+    foto_url = serializers.SerializerMethodField()
 
     class Meta:
         model = Variante
         fields = [
             "id", "codigo_barras", "descripcion", "categoria", "marca", "modelo",
-            "color", "material", "precio", "costo", "stock_total", "existencias",
+            "color", "material", "precio", "costo", "stock_total", "existencias", "foto_url",
         ]
+
+    def get_foto_url(self, obj):
+        """La fecha va en la URL para que el celular no muestre una foto vieja guardada en caché."""
+        actualizada = getattr(obj, "foto_actualizada", None)
+        if not actualizada:
+            return None
+        return f"/api/variantes/{obj.pk}/foto/?v={int(actualizada.timestamp())}"
 
     def _existencias(self, obj):
         return [e for e in obj.existencias.all() if e.cantidad > 0]

@@ -1,10 +1,11 @@
-/* App del piso de venta: buscar, escanear, registrar entradas/salidas y dar de alta productos.
+/* App del piso de venta con el formato EasyStock: inventario, escanear, producto, nuevo producto y auditoría.
    JavaScript sin frameworks a propósito: un solo archivo fácil de leer y cambiar. */
 "use strict";
 
 const ES_ADMIN = document.body.dataset.admin === "1";
 const $ = (sel, el = document) => el.querySelector(sel);
 const $$ = (sel, el = document) => [...el.querySelectorAll(sel)];
+const icono = (nombre) => `<svg aria-hidden="true"><use href="#i-${nombre}"/></svg>`;
 
 const MOTIVOS = {
   entrada: [["compra", "Compra a proveedor"], ["devolucion_cliente", "Devolución de cliente"]],
@@ -15,7 +16,9 @@ const estado = {
   catalogo: { categorias: [], marcas: [], modelos: [] },
   ubicaciones: [],
   variantes: new Map(), // id -> variante mostrada en pantalla
+  producto: null, // id de la variante abierta en la pantalla Producto
   mov: null, // { variante, tipo }
+  fotoAlta: null, // Blob listo para subir después de guardar el producto nuevo
 };
 
 /* ---------- utilidades ---------- */
@@ -44,13 +47,18 @@ function mensajeError(data) {
   return Object.entries(data).map(([k, v]) => `${k}: ${[].concat(v).join(" ")}`).join(" · ");
 }
 
-async function api(ruta, { method = "GET", body } = {}) {
-  const r = await fetch(`/api/${ruta}`, {
-    method,
-    credentials: "same-origin",
-    headers: { "Content-Type": "application/json", "X-CSRFToken": csrf() },
-    body: body ? JSON.stringify(body) : undefined,
-  });
+async function api(ruta, { method = "GET", body, formData } = {}) {
+  let r;
+  try {
+    r = await fetch(`/api/${ruta}`, {
+      method,
+      credentials: "same-origin",
+      headers: formData ? { "X-CSRFToken": csrf() } : { "Content-Type": "application/json", "X-CSRFToken": csrf() },
+      body: formData || (body ? JSON.stringify(body) : undefined),
+    });
+  } catch {
+    throw new Error("Sin conexión a internet. Revisa el Wi-Fi o los datos e intenta de nuevo.");
+  }
   let data = null;
   try { data = await r.json(); } catch { /* respuesta sin JSON */ }
   if (r.status === 403 && /credencial|autentic|credential/i.test(mensajeError(data))) {
@@ -79,73 +87,199 @@ function piezas(n) {
   return `${n} pza${n === 1 ? "" : "s"}`;
 }
 
-/* ---------- tarjetas de producto ---------- */
-
-function tarjeta(v) {
-  const ubicaciones = v.existencias.length
-    ? v.existencias.map((e) => `
-        <li><span class="ubic">${esc(e.ubicacion.nombre)}</span><span class="cant">${piezas(e.cantidad)}</span></li>`).join("")
-    : '<li class="sin-stock">Sin stock</li>';
-  const costo = v.costo !== undefined ? ` · Costo $${esc(v.costo)}` : "";
-  return `
-    <article class="tarjeta" data-id="${v.id}">
-      <h3>${esc(v.descripcion)}</h3>
-      <p class="sub">${esc(v.codigo_barras)} · Total: <b>${v.stock_total}</b> · $${esc(v.precio)}${costo}</p>
-      <ul class="ubicaciones">${ubicaciones}</ul>
-      <div class="fila">
-        <button class="boton" type="button" data-accion="entrada">Entrada</button>
-        <button class="boton primario" type="button" data-accion="salida" ${v.stock_total ? "" : "disabled"}>Salida</button>
-      </div>
-    </article>`;
+function opciones(lista, seleccionado) {
+  return lista.map(([valor, texto]) =>
+    `<option value="${esc(valor)}" ${String(valor) === String(seleccionado) ? "selected" : ""}>${esc(texto)}</option>`).join("");
 }
 
-function mostrarVariantes(contenedor, variantes, textoVacio = "Sin resultados.") {
-  variantes.forEach((v) => estado.variantes.set(v.id, v));
-  contenedor.innerHTML = variantes.length
-    ? variantes.map(tarjeta).join("")
-    : `<p class="vacio">${esc(textoVacio)}</p>`;
+function llenarSelect(sel, items, { seleccionado, vacio } = {}) {
+  const lista = items.map((i) => [i.id, i.nombre]);
+  sel.innerHTML = (vacio ? `<option value="">${esc(vacio)}</option>` : "") + opciones(lista, seleccionado);
 }
 
-function actualizarVariante(v) {
-  estado.variantes.set(v.id, v);
-  $$(`article.tarjeta[data-id="${v.id}"]`).forEach((el) => { el.outerHTML = tarjeta(v); });
-}
+/* ---------- navegación entre pantallas ----------
+   Cada pantalla se guarda en el historial, así el botón "atrás" de Android regresa a la anterior. */
 
-/* ---------- navegación ---------- */
+const PANTALLAS = ["inicio", "escanear", "producto", "alta", "auditar"];
 
-function mostrarVista(nombre) {
-  $$(".vista").forEach((s) => s.classList.toggle("activa", s.id === `vista-${nombre}`));
-  $$(".pestanas button").forEach((b) => b.classList.toggle("activa", b.dataset.vista === nombre));
+function mostrarPantalla(nombre) {
+  if (!PANTALLAS.includes(nombre)) nombre = "inicio";
+  $$(".pantalla").forEach((s) => s.classList.toggle("activa", s.id === `p-${nombre}`));
+  $("#menu").hidden = true;
   if (nombre !== "escanear") escaner.detener();
   if (nombre !== "auditar") escanerAud.detener();
-  if (nombre === "buscar") $("#q").focus();
+  if (nombre === "escanear") { $("#resultado-escaneo").innerHTML = ""; escaner.iniciar(); }
   if (nombre === "auditar") cargarAuditorias();
+  if (nombre === "inicio") cargarInventario();
+  window.scrollTo(0, 0);
 }
 
-/* ---------- buscar ---------- */
+function ir(nombre, { reemplazar = false } = {}) {
+  history[reemplazar ? "replaceState" : "pushState"]({ p: nombre }, "", `#${nombre}`);
+  mostrarPantalla(nombre);
+}
 
-let consulta = 0;
-let temporizadorBusqueda;
-$("#q").addEventListener("input", (e) => {
-  clearTimeout(temporizadorBusqueda);
-  const q = e.target.value.trim();
-  temporizadorBusqueda = setTimeout(() => buscar(q), 250);
+window.addEventListener("popstate", (e) => {
+  if ($("#dlg-mov").open) $("#dlg-mov").close();
+  mostrarPantalla(e.state?.p || "inicio");
 });
 
-async function buscar(q) {
-  const cont = $("#resultados");
-  if (q.length < 2) {
-    cont.innerHTML = '<p class="vacio">Escribe al menos 2 letras o escanea un código.</p>';
-    return;
-  }
+/* ---------- inicio: inventario ---------- */
+
+function miniatura(v) {
+  return v.foto_url
+    ? `<img src="${esc(v.foto_url)}" alt="" loading="lazy">`
+    : icono("sin-foto");
+}
+
+function itemInventario(v) {
+  const principal = v.existencias[0];
+  const otras = v.existencias.length > 1 ? ` +${v.existencias.length - 1}` : "";
+  const ubic = principal
+    ? `${icono("ubicacion")}${esc(principal.ubicacion.nombre)}${otras}`
+    : "Sin stock";
+  return `
+    <button class="item" type="button" data-producto="${v.id}">
+      <span class="miniatura">${miniatura(v)}</span>
+      <span class="item-texto"><b>${esc(v.descripcion)}</b><span class="item-ubic">${ubic}</span></span>
+      <span class="item-stock${v.stock_total ? "" : " agotado"}"><b>${v.stock_total}</b><span>pzs</span></span>
+    </button>`;
+}
+
+let consulta = 0;
+async function cargarInventario() {
+  const q = $("#q").value.trim();
+  const orden = $("#orden").value;
   const mia = ++consulta;
   try {
-    const variantes = await api(`buscar/?q=${encodeURIComponent(q)}`);
-    if (mia === consulta) mostrarVariantes(cont, variantes, `Nada para "${q}". ¿Lo das de alta?`);
+    const d = await api(`inventario/?orden=${encodeURIComponent(orden)}&q=${encodeURIComponent(q)}`);
+    if (mia !== consulta) return;
+    d.variantes.forEach((v) => estado.variantes.set(v.id, v));
+    const cont = $("#inv-lista");
+    if (!d.variantes.length) {
+      cont.innerHTML = q
+        ? `<p class="vacio corto">Nada para "${esc(q)}".</p>
+           <div class="fila centrada"><button class="boton tonal" type="button" data-ir="alta">Dar de alta</button></div>`
+        : '<p class="vacio">Inventario vacío</p>';
+      $("#inv-total").textContent = "";
+      return;
+    }
+    cont.innerHTML = d.variantes.map(itemInventario).join("");
+    const mostrados = d.variantes.length < d.total ? ` (se muestran ${d.variantes.length})` : "";
+    $("#inv-total").textContent = `${d.total} producto${d.total === 1 ? "" : "s"}${mostrados}`;
+  } catch (err) {
+    if (mia === consulta) aviso(err.message, "error");
+  }
+}
+
+let temporizadorBusqueda;
+$("#q").addEventListener("input", () => {
+  clearTimeout(temporizadorBusqueda);
+  temporizadorBusqueda = setTimeout(cargarInventario, 250);
+});
+$("#orden").addEventListener("change", cargarInventario);
+
+$("#btn-menu").addEventListener("click", (e) => {
+  e.stopPropagation();
+  $("#menu").hidden = !$("#menu").hidden;
+});
+
+/* ---------- producto ---------- */
+
+function pintarProducto(v) {
+  estado.variantes.set(v.id, v);
+  estado.producto = v.id;
+  const ubicaciones = v.existencias.length
+    ? v.existencias.map((e) => `
+        <li><span class="ubic">${icono("ubicacion")}${esc(e.ubicacion.nombre)}</span><span class="cant">${piezas(e.cantidad)}</span></li>`).join("")
+    : '<li class="sin-stock">Sin stock en ninguna ubicación</li>';
+  const chips = [v.categoria, v.marca, v.modelo, v.color, v.material].filter(Boolean)
+    .map((t) => `<span class="chip">${esc(t)}</span>`).join("");
+  const costo = v.costo !== undefined
+    ? `<div class="dato"><span>Costo</span><b>$${esc(v.costo)}</b></div>` : "";
+  $("#producto-detalle").innerHTML = `
+    <div class="detalle">
+      <p class="sku">SKU: ${esc(v.codigo_barras)}</p>
+      <div class="foto">${v.foto_url ? `<img src="${esc(v.foto_url)}" alt="Foto de ${esc(v.descripcion)}">` : icono("sin-foto")}</div>
+      <div class="fila centrada">
+        <label class="boton tonal chico">${icono("camara")}Cámara
+          <input type="file" accept="image/*" capture="environment" data-foto="producto" hidden></label>
+        <label class="boton tonal chico">${icono("galeria")}Galería
+          <input type="file" accept="image/*" data-foto="producto" hidden></label>
+      </div>
+      <h2>${esc(v.descripcion)}</h2>
+      <div class="chips">${chips}</div>
+      <div class="datos">
+        <div class="dato"><span>En tienda</span><b>${piezas(v.stock_total)}</b></div>
+        <div class="dato"><span>Precio</span><b>$${esc(v.precio)}</b></div>
+        ${costo}
+      </div>
+      <p class="titulo-foto">Dónde está</p>
+      <ul class="ubicaciones">${ubicaciones}</ul>
+      <div class="fila">
+        <button class="boton tonal" type="button" data-accion="entrada">Entrada</button>
+        <button class="boton primario" type="button" data-accion="salida" ${v.stock_total ? "" : "disabled"}>Salida / Venta</button>
+      </div>
+    </div>`;
+}
+
+function abrirProducto(v) {
+  pintarProducto(v);
+  ir("producto");
+}
+
+/* ---------- fotos ---------- */
+
+/** Reduce la foto en el celular antes de subirla: sube rápido aunque la señal sea mala. */
+async function reducirFoto(archivo, lado = 1280) {
+  try {
+    const imagen = await createImageBitmap(archivo, { imageOrientation: "from-image" });
+    const escala = Math.min(1, lado / Math.max(imagen.width, imagen.height));
+    const lienzo = document.createElement("canvas");
+    lienzo.width = Math.round(imagen.width * escala);
+    lienzo.height = Math.round(imagen.height * escala);
+    lienzo.getContext("2d").drawImage(imagen, 0, 0, lienzo.width, lienzo.height);
+    const blob = await new Promise((ok) => lienzo.toBlob(ok, "image/jpeg", 0.85));
+    return blob || archivo;
+  } catch {
+    return archivo; // El servidor la reduce de todos modos.
+  }
+}
+
+async function subirFoto(idVariante, blob) {
+  const datos = new FormData();
+  datos.append("foto", blob, "foto.jpg");
+  const r = await api(`variantes/${idVariante}/foto/`, { method: "POST", formData: datos });
+  return r.variante;
+}
+
+function vistaPrevia(contenedor, blob) {
+  const url = URL.createObjectURL(blob);
+  contenedor.innerHTML = `<img src="${url}" alt="Vista previa">`;
+}
+
+document.addEventListener("change", async (e) => {
+  const entrada = e.target.closest("input[data-foto]");
+  if (!entrada || !entrada.files.length) return;
+  const archivo = entrada.files[0];
+  entrada.value = ""; // Permite elegir la misma foto otra vez.
+  const blob = await reducirFoto(archivo);
+
+  if (entrada.dataset.foto === "alta") {
+    estado.fotoAlta = blob;
+    vistaPrevia($("#alta-foto"), blob);
+    return;
+  }
+  // Foto de un producto existente: se sube de inmediato.
+  vistaPrevia($("#producto-detalle .foto"), blob);
+  try {
+    const v = await subirFoto(estado.producto, blob);
+    pintarProducto(v);
+    aviso("Foto guardada.");
   } catch (err) {
     aviso(err.message, "error");
   }
-}
+});
 
 /* ---------- escáner (componente reutilizable) ---------- */
 
@@ -164,6 +298,7 @@ class Escaner {
     this.continuo = continuo;
     this.lector = null;
     this.activo = false;
+    this.iniciando = false;
     this.pausado = false;
   }
 
@@ -172,14 +307,18 @@ class Escaner {
   }
 
   async iniciar() {
+    if (this.activo || this.iniciando) return;
     if (!window.Html5Qrcode) {
-      aviso("No se pudo cargar el lector de códigos. Revisa tu conexión.", "error");
+      aviso("No se pudo cargar el lector de códigos. Cierra y abre la app.", "error");
       return;
     }
+    this.iniciando = true;
     const F = window.Html5QrcodeSupportedFormats;
     this.lector = this.lector || new window.Html5Qrcode(this.id, {
       verbose: false,
-      formatsToSupport: [F.QR_CODE, F.EAN_13, F.EAN_8, F.UPC_A, F.UPC_E, F.CODE_128],
+      formatsToSupport: [F.QR_CODE, F.EAN_13, F.EAN_8, F.UPC_A, F.UPC_E, F.CODE_128, F.CODE_39],
+      // Usa el lector de códigos nativo de Android cuando existe: es mucho más rápido.
+      experimentalFeatures: { useBarCodeDetectorIfSupported: true },
     });
     const contenedor = document.getElementById(this.id);
     // Se muestra el contenedor ANTES de iniciar: el lector usa su ancho para dimensionar el video.
@@ -201,7 +340,9 @@ class Escaner {
       this.boton.textContent = "Detener cámara";
     } catch (err) {
       contenedor.hidden = true;
-      aviso(`No se pudo abrir la cámara: ${err}`, "error");
+      aviso(`No se pudo abrir la cámara. Revisa que la app tenga permiso de cámara. (${err})`, "error");
+    } finally {
+      this.iniciando = false;
     }
   }
 
@@ -238,28 +379,27 @@ class Escaner {
 
 async function resolverCodigo(codigo) {
   const cont = $("#resultado-escaneo");
-  cont.innerHTML = `<p class="vacio">Buscando ${esc(codigo)}…</p>`;
+  cont.innerHTML = `<p class="vacio corto">Buscando ${esc(codigo)}…</p>`;
   try {
     const d = await api(`codigo/?c=${encodeURIComponent(codigo)}`);
     if (d.tipo === "variante") {
-      mostrarVariantes(cont, [d.variante]);
+      cont.innerHTML = "";
+      pintarProducto(d.variante);
+      ir("producto", { reemplazar: true }); // "atrás" desde el producto regresa al inventario
     } else if (d.tipo === "ubicacion") {
       const filas = d.contenido.map((c) =>
         `<li><span>${esc(c.descripcion)}</span><span class="cant">${piezas(c.cantidad)}</span></li>`).join("");
       cont.innerHTML = `
         <article class="tarjeta">
-          <h3>${esc(d.ubicacion.nombre)}</h3>
+          <h3>${icono("ubicacion")} ${esc(d.ubicacion.nombre)}</h3>
           <ul class="ubicaciones">${filas || '<li class="sin-stock">Vacía</li>'}</ul>
         </article>`;
     }
   } catch (err) {
     if (err.status === 404) {
-      cont.innerHTML = `
-        <article class="tarjeta nuevo">
-          <h3>Código nuevo</h3>
-          <p class="sub">${esc(codigo)} no está registrado.</p>
-          <button class="boton primario" type="button" data-alta="${esc(codigo)}">Dar de alta</button>
-        </article>`;
+      cont.innerHTML = "";
+      irAlta(codigo, { reemplazar: true });
+      aviso(`El código ${codigo} es nuevo. Llena los datos del producto.`);
     } else {
       cont.innerHTML = "";
       aviso(err.message, "error");
@@ -272,15 +412,10 @@ $("#btn-escanear").addEventListener("click", () => escaner.alternar());
 $("#form-codigo-manual").addEventListener("submit", (e) => {
   e.preventDefault();
   const codigo = $("#codigo-manual").value.trim();
-  if (codigo) resolverCodigo(codigo);
+  if (codigo) { escaner.detener(); resolverCodigo(codigo); }
 });
 
 /* ---------- movimientos (entrada / salida) ---------- */
-
-function opciones(lista, seleccionado) {
-  return lista.map(([valor, texto]) =>
-    `<option value="${esc(valor)}" ${String(valor) === String(seleccionado) ? "selected" : ""}>${esc(texto)}</option>`).join("");
-}
 
 function abrirMovimiento(variante, tipo) {
   estado.mov = { variante, tipo };
@@ -299,7 +434,6 @@ function abrirMovimiento(variante, tipo) {
   const preferida = variante.existencias[0]?.ubicacion.id;
   $("#mov-ubicacion").innerHTML = opciones(lista, preferida);
   $("#dlg-mov").showModal();
-  cantidad.select();
 }
 
 $("#mov-cancelar").addEventListener("click", () => $("#dlg-mov").close());
@@ -322,7 +456,7 @@ $("#form-mov").addEventListener("submit", async (e) => {
       },
     });
     $("#dlg-mov").close();
-    actualizarVariante(r.variante);
+    pintarProducto(r.variante);
     aviso(`${tipo === "salida" ? "Salida" : "Entrada"} registrada. Quedan ${piezas(r.variante.stock_total)}.`);
   } catch (err) {
     aviso(err.message, "error");
@@ -331,12 +465,16 @@ $("#form-mov").addEventListener("submit", async (e) => {
   }
 });
 
-/* ---------- alta rápida ---------- */
+/* Botones − y + junto a un campo numérico */
+document.addEventListener("click", (e) => {
+  const paso = e.target.closest("[data-paso]");
+  if (!paso) return;
+  const campo = document.getElementById(paso.dataset.para);
+  const minimo = Number(paso.dataset.minimo ?? campo.min ?? 0);
+  campo.value = Math.max(minimo, (Number(campo.value) || 0) + Number(paso.dataset.paso));
+});
 
-function llenarSelect(sel, items, { seleccionado, vacio } = {}) {
-  const lista = items.map((i) => [i.id, i.nombre]);
-  sel.innerHTML = (vacio ? `<option value="">${esc(vacio)}</option>` : "") + opciones(lista, seleccionado);
-}
+/* ---------- nuevo producto ---------- */
 
 function llenarModelos(seleccionado) {
   const marca = Number($("#alta-marca").value);
@@ -359,7 +497,7 @@ async function cargarCatalogo(seleccion = {}) {
 
 async function cargarUbicaciones() {
   estado.ubicaciones = await api("ubicaciones/");
-  llenarSelect($("#alta-ubicacion"), estado.ubicaciones, { vacio: "Elige ubicación" });
+  llenarSelect($("#alta-ubicacion"), estado.ubicaciones, { seleccionado: $("#alta-ubicacion").value, vacio: "Elige ubicación" });
 }
 
 $("#alta-marca").addEventListener("change", () => llenarModelos());
@@ -386,6 +524,21 @@ $$("[data-nuevo]").forEach((boton) => boton.addEventListener("click", async () =
   }
 }));
 
+function limpiarFotoAlta() {
+  estado.fotoAlta = null;
+  $("#alta-foto").innerHTML = icono("sin-foto");
+}
+
+function irAlta(codigo, opciones_ = {}) {
+  const escaneado = Boolean(codigo);
+  $("#alta-codigo").value = codigo || "";
+  $("#alta-sku").textContent = codigo || "";
+  $("#alta-sku-texto").hidden = !escaneado;
+  $("#alta-codigo-campo").hidden = escaneado;
+  limpiarFotoAlta();
+  ir("alta", opciones_);
+}
+
 $("#form-alta").addEventListener("submit", async (e) => {
   e.preventDefault();
   const form = e.target;
@@ -393,31 +546,37 @@ $("#form-alta").addEventListener("submit", async (e) => {
   body.cantidad = Number(body.cantidad || 0);
   body.ubicacion = body.ubicacion ? Number(body.ubicacion) : null;
   if (!body.costo) delete body.costo;
+  if (!body.nombre_producto.trim()) return aviso("Escribe el nombre del producto.", "error");
+  if (body.precio === "") return aviso("Escribe el precio de venta.", "error");
+  if (!body.categoria) return aviso("Elige la categoría.", "error");
+  if (!body.modelo_telefono) return aviso("Elige la marca y el modelo de teléfono.", "error");
   if (body.cantidad > 0 && !body.ubicacion) return aviso("Elige en qué ubicación se guardan las piezas.", "error");
 
   const boton = form.querySelector('button[type="submit"]');
   boton.disabled = true;
   try {
     const r = await api("alta-rapida/", { method: "POST", body });
-    mostrarVariantes($("#resultado-alta"), [r.variante]);
-    aviso("Producto guardado.");
+    let variante = r.variante;
+    if (estado.fotoAlta) {
+      try {
+        variante = await subirFoto(variante.id, estado.fotoAlta);
+      } catch (err) {
+        aviso(`El producto se guardó, pero la foto no: ${err.message} Puedes tomarla desde el producto.`, "error");
+      }
+    }
     // Se conservan categoría, marca, modelo, producto, precio y ubicación para capturar el siguiente color rápido.
-    form.codigo_barras.value = "";
     form.color.value = "";
     form.cantidad.value = 1;
-    form.codigo_barras.focus();
+    limpiarFotoAlta();
+    pintarProducto(variante);
+    ir("producto", { reemplazar: true });
+    aviso("¡Producto nuevo guardado!");
   } catch (err) {
     aviso(err.message, "error");
   } finally {
     boton.disabled = false;
   }
 });
-
-function irAlta(codigo) {
-  $("#alta-codigo").value = codigo || "";
-  $("#resultado-alta").innerHTML = "";
-  mostrarVista("alta");
-}
 
 /* ---------- auditoría ---------- */
 /* Contar una zona completa. Se escanea el QR de la caja y luego cada pieza que hay en ella.
@@ -439,7 +598,7 @@ async function cargarAuditorias() {
           <article class="tarjeta">
             <h3>${esc(a.zona)}</h3>
             <p class="sub">${esc(a.estado_texto)} · iniciada por ${esc(a.creada_por)} el ${esc(a.creada)}</p>
-            <div class="fila"><button class="boton" type="button" data-aud-abrir="${a.id}">
+            <div class="fila"><button class="boton tonal" type="button" data-aud-abrir="${a.id}">
               ${a.estado === "abierta" ? "Continuar conteo" : "Ver"}</button></div>
           </article>`).join("")
       : "";
@@ -474,13 +633,13 @@ function pintarConteo(d) {
             <div class="aud-linea${l.contada ? " contada" : ""}">
               <div><b>${esc(l.descripcion)}</b><br><span class="sub">${esc(l.codigo)}</span></div>
               <div class="contador" data-variante="${l.variante_id}" data-ubicacion="${l.ubicacion_id}">
-                <button type="button" class="boton chico" data-aud="menos" aria-label="Una menos">−</button>
+                <button type="button" class="paso menos" data-aud="menos" aria-label="Una menos">${icono("menos")}</button>
                 <button type="button" class="cifra" data-aud="fijar" aria-label="Escribir cantidad">${l.contada ? l.contado : "—"}</button>
-                <button type="button" class="boton chico" data-aud="mas" aria-label="Una más">+</button>
+                <button type="button" class="paso mas" data-aud="mas" aria-label="Una más">${icono("mas")}</button>
               </div>
             </div>`).join("")}
         </section>`).join("")
-    : '<p class="vacio">El sistema no tiene piezas en esta zona. Escanea lo que encuentres.</p>';
+    : '<p class="vacio corto">El sistema no tiene piezas en esta zona. Escanea lo que encuentres.</p>';
   mostrarPaso("conteo");
 }
 
@@ -490,7 +649,7 @@ function pintarRevision(d) {
   const exactitud = (n) => (r.lineas ? Math.round((100 * (r.lineas - n)) / r.lineas) : 100);
 
   if (d.estado === "revision" && !d.es_admin) {
-    html += '<p>Conteo enviado. Un administrador revisará las diferencias y ajustará el inventario.</p>';
+    html += "<p>Conteo enviado. Un administrador revisará las diferencias y ajustará el inventario.</p>";
   } else if (d.estado === "revision") {
     const difs = d.lineas.filter((l) => l.diferencia !== 0);
     html += `
@@ -500,7 +659,7 @@ function pintarRevision(d) {
         <li><span>Piezas faltantes</span><b class="dif-neg">${r.faltantes}</b></li>
         <li><span>Piezas sobrantes</span><b class="dif-pos">${r.sobrantes}</b></li>
       </ul>
-      ${difs.length ? "<h3>Diferencias</h3>" : '<p class="vacio">Todo coincide. No hay nada que ajustar.</p>'}
+      ${difs.length ? "<h3>Diferencias</h3>" : '<p class="vacio corto">Todo coincide. No hay nada que ajustar.</p>'}
       ${difs.map((l) => `
         <div class="aud-linea">
           <div><b>${esc(l.descripcion)}</b><br><span class="sub">${esc(l.ubicacion)}${l.contada ? "" : " · no se contó"}</span></div>
@@ -608,7 +767,7 @@ $("#aud-salir").addEventListener("click", () => {
   cargarAuditorias();
 });
 
-$("#vista-auditar").addEventListener("click", async (e) => {
+$("#p-auditar").addEventListener("click", async (e) => {
   const abrir = e.target.closest("[data-aud-abrir]");
   if (abrir) {
     try { mostrarAuditoria(await api(`auditorias/${abrir.dataset.audAbrir}/`)); } catch (err) { aviso(err.message, "error"); }
@@ -650,18 +809,34 @@ $("#vista-auditar").addEventListener("click", async (e) => {
 /* ---------- eventos globales ---------- */
 
 document.addEventListener("click", (e) => {
-  const pestana = e.target.closest(".pestanas button");
-  if (pestana) return mostrarVista(pestana.dataset.vista);
+  if (!e.target.closest("#menu, #btn-menu")) $("#menu").hidden = true;
 
-  const accion = e.target.closest("[data-accion]");
-  if (accion) {
-    const id = Number(accion.closest("article.tarjeta").dataset.id);
-    return abrirMovimiento(estado.variantes.get(id), accion.dataset.accion);
+  if (e.target.closest("[data-atras]")) return history.back();
+
+  const destino = e.target.closest("[data-ir]");
+  if (destino) {
+    if (destino.dataset.ir === "alta") return irAlta("");
+    return ir(destino.dataset.ir);
   }
 
-  const alta = e.target.closest("[data-alta]");
-  if (alta) irAlta(alta.dataset.alta);
+  const producto = e.target.closest("[data-producto]");
+  if (producto) return abrirProducto(estado.variantes.get(Number(producto.dataset.producto)));
+
+  const accion = e.target.closest("[data-accion]");
+  if (accion) return abrirMovimiento(estado.variantes.get(estado.producto), accion.dataset.accion);
 });
+
+/* ---------- botón "atrás" de Android (dentro del APK) ---------- */
+
+const AppNativa = window.Capacitor?.Plugins?.App;
+if (AppNativa) {
+  AppNativa.addListener("backButton", () => {
+    if ($("#dlg-mov").open) return $("#dlg-mov").close();
+    if (!$("#menu").hidden) { $("#menu").hidden = true; return; }
+    if (!$("#p-inicio").classList.contains("activa")) return history.back();
+    AppNativa.exitApp(); // En el inventario, "atrás" cierra la app en vez de regresar al inicio de sesión.
+  });
+}
 
 /* ---------- arranque ---------- */
 
@@ -669,6 +844,8 @@ document.addEventListener("click", (e) => {
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("/sw.js").catch(() => { /* sin service worker: la app sigue funcionando */ });
   }
+  history.replaceState({ p: "inicio" }, "", "#inicio");
+  mostrarPantalla("inicio");
   try {
     await Promise.all([cargarCatalogo(), cargarUbicaciones()]);
   } catch (err) {

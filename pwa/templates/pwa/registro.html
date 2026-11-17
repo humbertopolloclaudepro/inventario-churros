@@ -1,0 +1,40 @@
+{% extends "pwa/base.html" %}
+{% block titulo %}Crear cuenta · EasyStock{% endblock %}
+{% block clase_body %}pantalla-acceso{% endblock %}
+{% block cuerpo %}
+  <main class="acceso">
+    <svg class="acceso-icono" aria-hidden="true"><use href="#i-candado"/></svg>
+    <h1>Crear nueva cuenta</h1>
+    {% if not registro_abierto %}
+      <p class="sub centrado">El registro está cerrado. Pide tu usuario al administrador de la tienda.</p>
+    {% else %}
+      <form method="post" class="acceso-form" novalidate>
+        {% csrf_token %}
+        {% for e in form.non_field_errors %}<p class="error-campo">{{ e }}</p>{% endfor %}
+        <label class="campo">
+          <input name="username" value="{{ form.username.value|default:'' }}" placeholder=" " autocomplete="username" autocapitalize="none" required autofocus>
+          <span>Usuario</span>
+        </label>
+        {% for e in form.username.errors %}<p class="error-campo">{{ e }}</p>{% endfor %}
+        <label class="campo">
+          <input name="password1" type="password" placeholder=" " autocomplete="new-password" required>
+          <span>Contraseña</span>
+        </label>
+        {% for e in form.password1.errors %}<p class="error-campo">{{ e }}</p>{% endfor %}
+        <label class="campo">
+          <input name="password2" type="password" placeholder=" " autocomplete="new-password" required>
+          <span>Repite la contraseña</span>
+        </label>
+        {% for e in form.password2.errors %}<p class="error-campo">{{ e }}</p>{% endfor %}
+        <label class="campo">
+          <input name="codigo_tienda" placeholder=" " autocomplete="off" autocapitalize="none" required>
+          <span>Código de la tienda</span>
+        </label>
+        {% for e in form.codigo_tienda.errors %}<p class="error-campo">{{ e }}</p>{% endfor %}
+        <p class="sub">Mínimo 8 caracteres; no puede ser solo números. El código te lo da el dueño de la tienda.</p>
+        <button class="boton tonal ancho" type="submit">Crear nueva cuenta</button>
+      </form>
+    {% endif %}
+    <a class="enlace" href="{% url 'login' %}">Ya tengo cuenta</a>
+  </main>
+{% endblock %}

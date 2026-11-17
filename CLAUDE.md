@@ -1,4 +1,4 @@
-# Los Churros Rellenos · Control de inventario
+# Los Churros Rellenos · EasyStock (control de inventario)
 
 Proyecto escolar (UNAM, Dirección de Proyectos, 2027-1). Sistema de micro-logística para una
 tienda de accesorios de celular: saber **dónde** está cada pieza y detectar mercancía que se
@@ -19,6 +19,8 @@ iteración 9–13 nov, prueba final 17–20 nov.
 - `config/` — settings y URLs. SQLite en local; PostgreSQL en producción vía `DATABASE_URL`.
 - `catalogo/` — Categoria > Marca > ModeloTelefono > Producto > Variante (el SKU).
   El admin de esta app es el **dashboard del dueño** (radar, stock bajo, etiquetas).
+  `FotoVariante` guarda la foto de referencia **dentro de la base de datos** (JPEG ≤1024 px, lo prepara
+  `fotos.py`) porque el disco de Render se borra en cada despliegue; se sirve en `/api/variantes/<id>/foto/`.
 - `inventario/` — Ubicacion, Existencia (stock por variante y ubicación), Movimiento (inmutable),
   reglas de negocio (`services.py`), API para la app (`api.py`, `api_urls.py`), etiquetas QR (`etiquetas.py`),
   reporte PDF por categoría (`reportes.py` sin Django + `views.py`, en `/reportes/inventario.pdf`),
@@ -26,8 +28,16 @@ iteración 9–13 nov, prueba final 17–20 nov.
   la usan la página `/admin/importar/` y el comando `importar_catalogo`),
   auditoría de inventario (`auditorias.py`: modelos Auditoria/ConteoAuditoria; se cuenta a ciegas desde la app,
   pestaña Auditar, y un administrador aplica los ajustes con motivo "conteo").
-- `pwa/` — la app del celular: una sola página (`templates/pwa/app.html` + `static/pwa/app.js`),
-  JavaScript sin frameworks, escáner con html5-qrcode, instalable en Android.
+- `pwa/` — la app del celular con el **formato EasyStock** (barra azul, campos con contorno, botón
+  flotante "Escanear", botones − rojo / + verde): una sola página (`templates/pwa/app.html` + `static/pwa/app.js`)
+  con pantallas Inventario, Escanear, Producto, Nuevo Producto y Auditoría; navegación con el historial
+  para que el botón "atrás" de Android funcione. JavaScript sin frameworks, escáner html5-qrcode en
+  `static/pwa/vendor/`, íconos SVG en `templates/pwa/iconos.html`. Login "Acceso EasyStock" y
+  "Crear nueva cuenta" (`/registro/`, crea Vendedores; solo funciona si `CODIGO_REGISTRO` está definido).
+- `android-app/` — el **APK**: Capacitor abre `APP_URL/app/` en una app nativa. Se compila en GitHub
+  Actions (`.github/workflows/apk.yml`) y se publica en Releases. Ver `android-app/LEEME.md`.
+  Las pantallas NO viven en el APK: un cambio en `pwa/` llega a los celulares al desplegar el servidor.
+- `render.yaml` — despliegue en Render (servidor + PostgreSQL).
 
 No hay un dashboard propio: el panel de administración de Django ES el dashboard.
 

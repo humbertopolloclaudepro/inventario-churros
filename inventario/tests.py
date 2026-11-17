@@ -459,7 +459,9 @@ class PwaTests(Base):
         self.assertEqual(self.client.get("/app/").status_code, 302)
         self.client.force_login(self.vendedor)
         r = self.client.get("/app/")
-        self.assertContains(r, "Alta rápida")
+        self.assertContains(r, "Inventario EasyStock")
+        self.assertContains(r, "Nuevo Producto")
+        self.assertContains(r, "Escanear")
         self.assertNotContains(r, 'name="costo"')
         self.assertEqual(self.client.get("/sw.js").status_code, 200)
         self.assertEqual(self.client.get("/manifest.webmanifest").status_code, 200)
@@ -497,3 +499,134 @@ class PwaTests(Base):
         r = self.client.get("/app/")
         self.assertContains(r, 'href="/admin/"')
         self.assertContains(r, ">Panel<")
+
+
+class InventarioListaTests(Base):
+    def setUp(self):
+        self.cliente = APIClient()
+        self.cliente.force_authenticate(self.vendedor)
+        producto = Producto.objects.create(categoria=self.fundas, modelo_telefono=self.iphone14pro, nombre="Mica cristal")
+        self.mica = Variante.objects.create(producto=producto, codigo_barras="7502", precio=80)
+        self.estante = Ubicacion.objects.create(zona="Estante A")
+        self.entrada(5)
+        registrar_movimiento(variante=self.mica, ubicacion=self.estante, tipo=T.ENTRADA, motivo=M.COMPRA,
+                             cantidad=2, usuario=self.admin)
+        registrar_movimiento(variante=self.mica, ubicacion=self.cajonera, tipo=T.ENTRADA, motivo=M.COMPRA,
+                             cantidad=1, usuario=self.admin)
+
+    def nombres(self, ruta):
+        r = self.cliente.get(ruta)
+        self.assertEqual(r.status_code, 200)
+        return [v["codigo_barras"] for v in r.data["variantes"]], r.data
+
+    def test_lista_todo_con_stock_total(self):
+        codigos, data = self.nombres("/api/inventario/")
+        self.assertEqual(data["total"], 2)
+        self.assertEqual(codigos, ["7501", "7502"])  # Funda... antes que Mica...
+        mica = data["variantes"][1]
+        self.assertEqual(mica["stock_total"], 3)
+        self.assertNotIn("costo", mica)
+
+    def test_orden_por_cantidad(self):
+        self.assertEqual(self.nombres("/api/inventario/?orden=cantidad")[0], ["7502", "7501"])
+        self.assertEqual(self.nombres("/api/inventario/?orden=-cantidad")[0], ["7501", "7502"])
+        self.assertEqual(self.nombres("/api/inventario/?orden=-nombre")[0], ["7502", "7501"])
+
+    def test_busca_por_ubicacion_sin_duplicar(self):
+        codigos, _ = self.nombres("/api/inventario/?q=estante")
+        self.assertEqual(codigos, ["7502"])
+        codigos, _ = self.nombres("/api/inventario/?q=cajonera")
+        self.assertEqual(sorted(codigos), ["7501", "7502"])
+
+    def test_requiere_sesion(self):
+        self.assertEqual(APIClient().get("/api/inventario/").status_code, 403)
+
+
+def imagen_prueba(formato="PNG", tamano=(1600, 900)):
+    from io import BytesIO
+
+    from django.core.files.uploadedfile import SimpleUploadedFile
+    from PIL import Image
+
+    buf = BytesIO()
+    Image.new("RGB", tamano, "red").save(buf, formato)
+    return SimpleUploadedFile(f"foto.{formato.lower()}", buf.getvalue(), content_type=f"image/{formato.lower()}")
+
+
+class FotoTests(Base):
+    def setUp(self):
+        self.cliente = APIClient()
+        self.cliente.force_authenticate(self.vendedor)
+        self.ruta = f"/api/variantes/{self.variante.pk}/foto/"
+
+    def test_subir_y_ver_foto(self):
+        self.assertEqual(self.cliente.get(self.ruta).status_code, 404)
+        r = self.cliente.post(self.ruta, {"foto": imagen_prueba()}, format="multipart")
+        self.assertEqual(r.status_code, 200)
+        url = r.data["variante"]["foto_url"]
+        self.assertTrue(url.startswith(self.ruta + "?v="))
+
+        r = self.cliente.get(url)
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r["Content-Type"], "image/jpeg")
+        from io import BytesIO
+
+        from PIL import Image
+        imagen = Image.open(BytesIO(r.content))
+        self.assertEqual(imagen.format, "JPEG")
+        self.assertLessEqual(max(imagen.size), 1024)  # se reduce en el servidor
+
+        # La foto aparece en la búsqueda y en la lista
+        self.assertEqual(self.cliente.get("/api/buscar/?q=rudo").data[0]["foto_url"], url)
+
+    def test_reemplazar_foto(self):
+        self.cliente.post(self.ruta, {"foto": imagen_prueba()}, format="multipart")
+        self.cliente.post(self.ruta, {"foto": imagen_prueba("JPEG", (300, 300))}, format="multipart")
+        from catalogo.models import FotoVariante
+        self.assertEqual(FotoVariante.objects.count(), 1)
+
+    def test_rechaza_archivo_que_no_es_imagen(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        falso = SimpleUploadedFile("foto.jpg", b"no soy una imagen", content_type="image/jpeg")
+        r = self.cliente.post(self.ruta, {"foto": falso}, format="multipart")
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("imagen", r.data["detail"])
+        r = self.cliente.post(self.ruta, {}, format="multipart")
+        self.assertEqual(r.status_code, 400)
+
+    def test_requiere_sesion(self):
+        self.assertEqual(APIClient().get(self.ruta).status_code, 403)
+        r = APIClient().post(self.ruta, {"foto": imagen_prueba()}, format="multipart")
+        self.assertEqual(r.status_code, 403)
+
+
+class RegistroTests(TestCase):
+    datos = {"username": "nuevo", "password1": "Churros-2026!", "password2": "Churros-2026!", "codigo_tienda": "CELLS"}
+
+    def test_login_con_formato_easystock(self):
+        r = self.client.get("/login/")
+        self.assertContains(r, "Acceso EasyStock")
+        self.assertContains(r, 'href="/registro/"')
+        self.assertContains(self.client.get("/login/?creada=1"), "Cuenta en la nube creada. Inicia sesión.")
+
+    def test_registro_cerrado_sin_codigo_en_el_servidor(self):
+        with self.settings(CODIGO_REGISTRO=""):
+            self.assertContains(self.client.get("/registro/"), "El registro está cerrado")
+            self.client.post("/registro/", self.datos)
+        self.assertFalse(get_user_model().objects.filter(username="nuevo").exists())
+
+    def test_codigo_incorrecto(self):
+        with self.settings(CODIGO_REGISTRO="OTRO"):
+            r = self.client.post("/registro/", self.datos)
+        self.assertContains(r, "El código de la tienda no es correcto")
+        self.assertFalse(get_user_model().objects.filter(username="nuevo").exists())
+
+    def test_crea_vendedor(self):
+        call_command("crear_roles", stdout=StringIO())
+        with self.settings(CODIGO_REGISTRO="cells"):
+            r = self.client.post("/registro/", self.datos)
+        self.assertRedirects(r, "/login/?creada=1")
+        usuario = get_user_model().objects.get(username="nuevo")
+        self.assertEqual([g.name for g in usuario.groups.all()], [GRUPO_VENDEDOR])
+        self.assertFalse(usuario.is_staff)
+        self.assertTrue(self.client.login(username="nuevo", password="Churros-2026!"))

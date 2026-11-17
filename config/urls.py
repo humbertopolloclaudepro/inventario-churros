@@ -16,7 +16,7 @@ urlpatterns = [
     path("admin/importar/plantilla.xlsx", inventario_views.plantilla_importacion, name="plantilla-importacion"),
     path("admin/", admin.site.urls),
     path("reportes/inventario.pdf", inventario_views.reporte_inventario, name="reporte-inventario"),
-    path("login/", auth_views.LoginView.as_view(), name="login"),
+    path("login/", auth_views.LoginView.as_view(redirect_authenticated_user=True), name="login"),
     path("logout/", auth_views.LogoutView.as_view(), name="logout"),
     path("api/", include("inventario.api_urls")),
     path("", include("pwa.urls")),

@@ -1,173 +1,291 @@
-/* Pensado para usarse con una mano en el mostrador: botones grandes y texto legible. */
+/* Estilo EasyStock: Material Design con barra azul, campos con contorno y botones tonales.
+   Pensado para usarse con una mano en el mostrador: objetivos táctiles de 48 px o más. */
 :root {
-  --fondo: #f7f5f2;
+  --azul: #4285f4;
+  --azul-oscuro: #1a5fd0;
+  --fondo: #fef7ff;
   --superficie: #ffffff;
-  --texto: #1f1b16;
-  --texto-suave: #6b6359;
-  --borde: #e3ddd4;
-  --acento: #b45309;
-  --acento-texto: #ffffff;
-  --ok: #15803d;
-  --error: #b91c1c;
-  --radio: 12px;
-  color-scheme: light dark;
+  --tonal: #f3edf7;
+  --morado: #6750a4;
+  --texto: #1d1b20;
+  --texto-suave: #49454f;
+  --contorno: #79747e;
+  --borde: #e0dce4;
+  --rojo: #f44336;
+  --verde: #4caf50;
+  --ok: #2e7d32;
+  --error: #b3261e;
+  --foto: #e8e8e8;
+  color-scheme: light;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --fondo: #171411;
-    --superficie: #221e1a;
-    --texto: #f3eee8;
-    --texto-suave: #b0a69a;
-    --borde: #3a332c;
-    --acento: #f59e0b;
-    --acento-texto: #1f1b16;
-  }
-}
-
-* { box-sizing: border-box; }
-/* Lo oculto siempre se oculta, aunque su clase le dé display: grid o flex */
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 [hidden] { display: none !important; }
 
 body {
   margin: 0;
-  font: 16px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font: 16px/1.4 Roboto, system-ui, -apple-system, "Segoe UI", sans-serif;
   background: var(--fondo);
   color: var(--texto);
-  padding-bottom: calc(72px + env(safe-area-inset-bottom));
 }
+svg { width: 24px; height: 24px; fill: currentColor; flex-shrink: 0; }
+h1, h2, h3 { font-weight: 500; }
+.sub { margin: 0; color: var(--texto-suave); font-size: 14px; overflow-wrap: anywhere; }
+.centrado { text-align: center; }
 
-.oculto { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
-
-.barra {
-  position: sticky; top: 0; z-index: 2;
-  display: flex; align-items: center; gap: 12px;
-  padding: 12px 16px;
-  background: var(--superficie);
-  border-bottom: 1px solid var(--borde);
-}
-.barra .usuario { margin-left: auto; color: var(--texto-suave); font-size: 14px; }
-a.usuario { text-decoration: underline dotted; text-underline-offset: 3px; }
-a.boton { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }
-.error-campo { margin: -4px 0 0; color: var(--error); font-size: 14px; }
-.barra form { margin: 0; }
-.enlace { background: none; border: 0; color: var(--acento); font: inherit; padding: 4px; cursor: pointer; }
-a.enlace { text-decoration: none; font-weight: 600; }
-
-main { padding: 16px; max-width: 640px; margin: 0 auto; }
-.vista { display: none; }
-.vista.activa { display: block; }
-
-input, select {
-  width: 100%;
-  font: inherit;
-  padding: 12px;
-  border: 1px solid var(--borde);
-  border-radius: var(--radio);
-  background: var(--superficie);
+/* ---------- barra superior ---------- */
+.appbar {
+  position: sticky; top: 0; z-index: 5;
+  display: flex; align-items: center; gap: 4px;
+  min-height: 56px;
+  padding: env(safe-area-inset-top) 4px 0 4px;
+  background: var(--azul);
   color: var(--texto);
-  min-height: 48px;
 }
-input:focus, select:focus { outline: 2px solid var(--acento); outline-offset: 1px; }
-.campo-busqueda input { font-size: 18px; }
-
-.boton {
-  min-height: 48px;
-  padding: 0 18px;
-  border-radius: var(--radio);
-  border: 1px solid var(--borde);
-  background: var(--superficie);
-  color: var(--texto);
-  font: inherit; font-weight: 600;
+.appbar h1 { flex: 1; margin: 0 12px; font-size: 20px; font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.appbar .icono-boton + h1 { margin-left: 4px; }
+.appbar form { margin: 0; }
+.icono-boton {
+  display: inline-grid; place-items: center;
+  width: 48px; height: 48px;
+  border: 0; border-radius: 50%;
+  background: none; color: inherit;
   cursor: pointer;
 }
-.boton.primario { background: var(--acento); border-color: var(--acento); color: var(--acento-texto); }
-.boton:disabled { opacity: .45; cursor: not-allowed; }
-.boton.chico { min-width: 48px; padding: 0; font-size: 22px; }
+.icono-boton:active { background: rgb(0 0 0 / .1); }
+
+/* ---------- menú ---------- */
+.menu {
+  position: fixed; top: calc(52px + env(safe-area-inset-top)); right: 8px; z-index: 6;
+  min-width: 230px;
+  padding: 8px 0;
+  background: var(--superficie);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgb(0 0 0 / .2);
+}
+.menu > button, .menu > a {
+  display: flex; align-items: center; gap: 14px;
+  width: 100%; min-height: 48px; padding: 0 16px;
+  border: 0; background: none; color: var(--texto);
+  font: inherit; text-align: left; text-decoration: none;
+  cursor: pointer;
+}
+.menu > button:active, .menu > a:active { background: var(--tonal); }
+.menu svg { color: var(--texto-suave); }
+.menu-usuario { margin: 0; padding: 8px 16px 10px; color: var(--texto-suave); font-size: 13px; border-bottom: 1px solid var(--borde); margin-bottom: 4px; }
+
+/* ---------- pantallas ---------- */
+.pantalla { display: none; min-height: 100vh; }
+.pantalla.activa { display: block; }
+.contenido { padding: 16px 16px calc(96px + env(safe-area-inset-bottom)); max-width: 640px; margin: 0 auto; }
+
+/* ---------- campos con contorno y etiqueta flotante ---------- */
+.campo { position: relative; display: block; flex: 1; min-width: 0; }
+.campo input, .campo select {
+  width: 100%; min-height: 56px;
+  padding: 16px 14px;
+  font: inherit; color: var(--texto);
+  background: transparent;
+  border: 1px solid var(--contorno); border-radius: 4px;
+  appearance: none; -webkit-appearance: none;
+}
+.campo select {
+  padding-right: 36px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M7 10l5 5 5-5z' fill='%2349454f'/%3E%3C/svg%3E") no-repeat right 8px center / 24px;
+}
+.campo input:focus, .campo select:focus { outline: none; border: 2px solid var(--morado); padding: 15px 13px; }
+.campo select:focus { padding-right: 35px; }
+.campo > span {
+  position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+  padding: 0 4px;
+  color: var(--texto-suave);
+  background: var(--fondo);
+  pointer-events: none;
+  transition: top .15s, font-size .15s;
+  max-width: calc(100% - 24px);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+dialog .campo > span { background: var(--superficie); }
+.campo input:focus + span, .campo input:not(:placeholder-shown) + span,
+.campo.fijo > span { top: 0; font-size: 12px; }
+.campo input:focus + span, .campo select:focus + span { color: var(--morado); }
+.campo.con-icono > svg { position: absolute; left: 12px; top: 16px; color: var(--texto-suave); pointer-events: none; }
+.campo.con-icono input, .campo.con-icono select { padding-left: 46px; }
+.campo.con-icono input:focus, .campo.con-icono select:focus { padding-left: 45px; }
+.campo.con-icono > span { left: 42px; }
+.campo.con-icono input:focus + span, .campo.con-icono input:not(:placeholder-shown) + span,
+.campo.con-icono.fijo > span { left: 12px; }
+input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; }
+input[type=search]::-webkit-search-cancel-button { -webkit-appearance: none; }
+
+/* ---------- botones ---------- */
+.boton {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: 48px; padding: 0 24px;
+  border: 1px solid var(--contorno); border-radius: 24px;
+  background: none; color: var(--morado);
+  font: inherit; font-size: 15px; font-weight: 500;
+  text-decoration: none;
+  cursor: pointer;
+}
+.boton svg { width: 18px; height: 18px; }
+.boton.tonal {
+  border: 0; background: var(--tonal);
+  box-shadow: 0 1px 2px rgb(0 0 0 / .25);
+}
+.boton.primario { border: 0; background: var(--azul); color: #fff; }
+.boton.ancho { width: 100%; }
+.boton.chico { min-height: 40px; padding: 0 18px; font-size: 14px; }
+.boton.angosto { flex: 0 0 auto; padding: 0 20px; }
+.boton:disabled { opacity: .45; cursor: not-allowed; box-shadow: none; }
+.boton:active:not(:disabled) { filter: brightness(.94); }
+
+/* Botones cuadrados − y + (rojo y verde, como en EasyStock) */
+.paso {
+  display: grid; place-items: center;
+  width: 48px; height: 48px; flex-shrink: 0;
+  border: 0; border-radius: 8px;
+  color: #fff; cursor: pointer;
+}
+.paso.menos { background: var(--rojo); }
+.paso.mas { background: var(--verde); }
+.paso.neutro { background: var(--tonal); color: var(--morado); box-shadow: 0 1px 2px rgb(0 0 0 / .25); }
+.con-pasos, .con-boton { display: flex; align-items: center; gap: 8px; }
+
+.enlace { display: inline-block; padding: 12px; color: var(--morado); font-size: 14px; text-decoration: none; background: none; border: 0; font-family: inherit; cursor: pointer; }
+
+.fab {
+  position: fixed; right: 16px; bottom: calc(20px + env(safe-area-inset-bottom)); z-index: 4;
+  display: inline-flex; align-items: center; gap: 10px;
+  min-height: 56px; padding: 0 20px 0 16px;
+  border: 0; border-radius: 16px;
+  background: var(--azul); color: var(--texto);
+  font: inherit; font-weight: 500;
+  box-shadow: 0 3px 8px rgb(0 0 0 / .3);
+  cursor: pointer;
+}
 
 .fila { display: flex; gap: 8px; margin-top: 12px; }
 .fila > * { flex: 1; }
-
-.lista { margin-top: 16px; display: grid; gap: 12px; }
-.vacio { color: var(--texto-suave); text-align: center; margin: 24px 0; }
-
-.tarjeta {
-  background: var(--superficie);
-  border: 1px solid var(--borde);
-  border-radius: var(--radio);
-  padding: 14px;
-}
-.tarjeta h3 { margin: 0 0 4px; font-size: 17px; }
-.tarjeta.nuevo { border-color: var(--acento); }
-.sub { margin: 0; color: var(--texto-suave); font-size: 14px; overflow-wrap: anywhere; }
-
-.ubicaciones { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 6px; }
-.ubicaciones li {
-  display: flex; justify-content: space-between; gap: 12px;
-  padding: 10px 12px;
-  border-radius: 8px;
-  background: var(--fondo);
-}
-.ubic { font-weight: 700; font-size: 17px; }
-.cant { white-space: nowrap; color: var(--texto-suave); }
-.sin-stock { color: var(--texto-suave); }
-
-/* El contenedor debe estar visible ANTES de encender la cámara: el lector mide su ancho al iniciar. */
-.lector { width: 100%; border-radius: var(--radio); overflow: hidden; background: #000; }
-.lector[hidden] { display: none; }
-.lector video { width: 100% !important; height: auto !important; display: block; }
-
-.formulario { display: grid; gap: 12px; }
-.formulario h2 { margin: 0; font-size: 20px; }
-.formulario label { display: grid; gap: 6px; font-size: 14px; color: var(--texto-suave); }
-.con-boton { display: flex; gap: 8px; }
+.fila.centrada { justify-content: center; }
+.fila.centrada > * { flex: 0 0 auto; }
 .dos { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 
-.pestanas {
-  position: fixed; bottom: 0; left: 0; right: 0; z-index: 2;
-  display: flex;
+/* ---------- acceso ---------- */
+.pantalla-acceso { min-height: 100vh; display: grid; place-items: center; }
+.acceso { width: min(100%, 420px); padding: 32px 24px; display: grid; justify-items: center; gap: 8px; }
+.acceso-icono { width: 72px; height: 72px; color: var(--azul); }
+.acceso h1 { margin: 4px 0 16px; font-size: 20px; font-weight: 600; }
+.acceso-form { width: 100%; display: grid; gap: 16px; }
+.acceso-form .boton { margin-top: 4px; }
+.error-campo { margin: -8px 0 0; color: var(--error); font-size: 14px; }
+.acceso-form > .error-campo:first-of-type { margin: 0; }
+
+/* ---------- inventario ---------- */
+.busqueda { display: flex; gap: 8px; align-items: center; }
+.orden { position: relative; display: grid; place-items: center; width: 48px; height: 56px; color: var(--texto-suave); flex-shrink: 0; }
+.orden select { position: absolute; inset: 0; opacity: 0; width: 100%; cursor: pointer; }
+#inv-total { margin: 12px 4px 0; }
+
+.lista { margin-top: 12px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
+.vacio { color: var(--texto); text-align: center; margin: 30vh 0 0; font-size: 14px; }
+.lista .vacio.corto { margin: 24px 0; color: var(--texto-suave); }
+
+.item {
+  display: flex; align-items: center; gap: 12px;
+  width: 100%; min-width: 0; padding: 10px 12px;
+  border: 0; border-radius: 12px;
   background: var(--superficie);
-  border-top: 1px solid var(--borde);
-  padding-bottom: env(safe-area-inset-bottom);
-}
-.pestanas button {
-  flex: 1; min-height: 60px;
-  background: none; border: 0;
-  font: inherit; font-weight: 600;
-  color: var(--texto-suave);
+  box-shadow: 0 1px 2px rgb(0 0 0 / .12);
+  font: inherit; color: inherit; text-align: left;
   cursor: pointer;
 }
-.pestanas button.activa { color: var(--acento); box-shadow: inset 0 3px 0 var(--acento); }
+.item:active { background: var(--tonal); }
+.miniatura { width: 56px; height: 56px; border-radius: 8px; background: var(--foto); display: grid; place-items: center; overflow: hidden; flex-shrink: 0; color: #9e9e9e; }
+.miniatura img { width: 100%; height: 100%; object-fit: cover; }
+.item-texto { flex: 1; min-width: 0; display: grid; }
+.item-texto b { display: block; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.item-ubic { display: flex; align-items: center; gap: 2px; color: var(--texto-suave); font-size: 13px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.item-ubic svg { width: 14px; height: 14px; }
+.item-stock { text-align: right; flex-shrink: 0; }
+.item-stock b { display: block; font-size: 20px; font-weight: 500; }
+.item-stock span { font-size: 12px; color: var(--texto-suave); }
+.item-stock.agotado b { color: var(--error); }
+
+/* ---------- producto ---------- */
+.sku { margin: 0; text-align: center; font-weight: 600; font-size: 14px; letter-spacing: .3px; }
+.titulo-foto { margin: 8px 0 0; text-align: center; font-weight: 600; font-size: 14px; }
+.foto {
+  display: grid; place-items: center;
+  width: 100%; height: min(75vw, 300px);
+  border: 1px solid #bdbdbd; border-radius: 8px;
+  background: var(--foto); color: #616161;
+  overflow: hidden;
+}
+.foto img { width: 100%; height: 100%; object-fit: contain; background: #fff; }
+.detalle { display: grid; gap: 12px; }
+.detalle h2 { margin: 4px 0 0; font-size: 22px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { padding: 4px 10px; border: 1px solid var(--borde); border-radius: 8px; font-size: 13px; color: var(--texto-suave); background: var(--superficie); }
+.datos { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
+.dato { padding: 10px 12px; border-radius: 12px; background: var(--superficie); box-shadow: 0 1px 2px rgb(0 0 0 / .12); }
+.dato span { display: block; font-size: 12px; color: var(--texto-suave); }
+.dato b { font-size: 20px; font-weight: 500; }
+
+.ubicaciones { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.ubicaciones li {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 12px; border-radius: 12px;
+  background: var(--superficie); box-shadow: 0 1px 2px rgb(0 0 0 / .12);
+}
+.ubic { display: flex; align-items: center; gap: 6px; font-weight: 600; font-size: 17px; }
+.ubic svg { color: var(--azul); }
+.cant { white-space: nowrap; color: var(--texto-suave); }
+.sin-stock { color: var(--texto-suave); justify-content: center !important; }
+
+/* tarjeta para resultados de escaneo (ubicación / código nuevo) */
+.tarjeta { padding: 14px; border-radius: 12px; background: var(--superficie); box-shadow: 0 1px 2px rgb(0 0 0 / .12); }
+.tarjeta h3 { margin: 0 0 8px; font-size: 17px; }
+.tarjeta .ubicaciones li { box-shadow: none; background: var(--fondo); }
+
+/* ---------- escáner ---------- */
+.lector { width: 100%; border-radius: 12px; overflow: hidden; background: #000; margin-bottom: 12px; }
+.lector video { width: 100% !important; height: auto !important; display: block; }
+
+.formulario { display: grid; gap: 16px; }
+.formulario h2 { margin: 0; font-size: 20px; }
 
 dialog {
   width: min(92vw, 440px);
-  border: 0; border-radius: 16px;
-  padding: 20px;
+  border: 0; border-radius: 28px;
+  padding: 24px;
   background: var(--superficie); color: var(--texto);
 }
-dialog::backdrop { background: rgb(0 0 0 / .45); }
+dialog::backdrop { background: rgb(0 0 0 / .4); }
 
 .aviso {
-  position: fixed; left: 16px; right: 16px; bottom: calc(76px + env(safe-area-inset-bottom)); z-index: 3;
-  max-width: 608px; margin: 0 auto;
+  position: fixed; left: 12px; right: 12px; bottom: calc(12px + env(safe-area-inset-bottom)); z-index: 10;
+  max-width: 600px; margin: 0 auto;
   padding: 14px 16px;
-  border-radius: var(--radio);
-  color: #fff; font-weight: 600;
-  background: var(--ok);
+  border-radius: 4px;
+  color: #f4eff4; font-size: 14px;
+  background: #322f35;
+  box-shadow: 0 3px 8px rgb(0 0 0 / .3);
 }
-.aviso.error { background: var(--error); }
+.aviso.error { background: var(--error); color: #fff; }
 
-/* Auditoría */
+/* ---------- auditoría ---------- */
 .aud-titulo { margin: 0; font-size: 20px; }
-.aud-caja { display: grid; gap: 6px; margin-top: 12px; font-size: 14px; color: var(--texto-suave); }
-.lector:not([hidden]) { margin-top: 12px; }
-.aud-grupo { background: var(--superficie); border: 1px solid var(--borde); border-radius: var(--radio); padding: 4px 14px; }
+.aud-caja { margin-top: 16px; }
+#aud-conteo .lector:not([hidden]) { margin-top: 12px; }
+#aud-pendientes h3 { margin: 8px 0 0; font-size: 16px; }
+.aud-grupo { background: var(--superficie); border-radius: 12px; padding: 4px 14px; box-shadow: 0 1px 2px rgb(0 0 0 / .12); }
 .aud-grupo h3 { font-size: 15px; margin: 10px 0 4px; }
 .aud-linea { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-top: 1px solid var(--borde); }
 .aud-grupo h3 + .aud-linea { border-top: 0; }
 .aud-linea > div:first-child { min-width: 0; overflow-wrap: anywhere; }
-.aud-linea.contada b { color: var(--texto); }
 .contador { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.contador .paso { width: 40px; height: 40px; }
 .cifra { min-width: 44px; min-height: 44px; border: 0; background: none; font: inherit; font-size: 20px; font-weight: 700; color: var(--texto); cursor: pointer; }
 .dif { display: grid; justify-items: end; flex-shrink: 0; }
 .dif b { font-size: 18px; }

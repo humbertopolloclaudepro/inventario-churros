@@ -1,42 +1,37 @@
-{% load static %}<!doctype html>
-<html lang="es-MX">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#b45309">
-  <title>Cambiar contraseña · Inventario</title>
-  <link rel="stylesheet" href="{% static 'pwa/styles.css' %}">
-</head>
-<body>
-  <header class="barra">
-    <a class="enlace" href="{% url 'app' %}">‹ Volver</a>
-    <strong>Cambiar contraseña</strong>
+{% extends "pwa/base.html" %}
+{% block titulo %}Cambiar contraseña · EasyStock{% endblock %}
+{% block cuerpo %}
+  <header class="appbar">
+    <a class="icono-boton" href="{% url 'app' %}" aria-label="Volver"><svg><use href="#i-atras"/></svg></a>
+    <h1>Cambiar contraseña</h1>
   </header>
-  <main>
-    <form method="post" class="formulario tarjeta">
+  <main class="contenido">
+    <form method="post" class="formulario">
       {% csrf_token %}
-      <p class="sub">Usuario: <b>{{ request.user.get_username }}</b></p>
+      <p class="sub centrado">Usuario: <b>{{ request.user.get_username }}</b></p>
 
       {% if form.non_field_errors %}<p class="error-campo">{{ form.non_field_errors|join:" " }}</p>{% endif %}
 
-      <label>Contraseña actual
-        <input name="old_password" type="password" autocomplete="current-password" required autofocus>
+      <label class="campo">
+        <input name="old_password" type="password" placeholder=" " autocomplete="current-password" required autofocus>
+        <span>Contraseña actual</span>
       </label>
       {% for e in form.old_password.errors %}<p class="error-campo">{{ e }}</p>{% endfor %}
 
-      <label>Contraseña nueva
-        <input name="new_password1" type="password" autocomplete="new-password" required>
+      <label class="campo">
+        <input name="new_password1" type="password" placeholder=" " autocomplete="new-password" required>
+        <span>Contraseña nueva</span>
       </label>
       {% for e in form.new_password1.errors %}<p class="error-campo">{{ e }}</p>{% endfor %}
       <p class="sub">Mínimo 8 caracteres. No puede ser solo números, ni muy común, ni parecida a tu usuario.</p>
 
-      <label>Repite la contraseña nueva
-        <input name="new_password2" type="password" autocomplete="new-password" required>
+      <label class="campo">
+        <input name="new_password2" type="password" placeholder=" " autocomplete="new-password" required>
+        <span>Repite la contraseña nueva</span>
       </label>
       {% for e in form.new_password2.errors %}<p class="error-campo">{{ e }}</p>{% endfor %}
 
-      <button class="boton primario" type="submit">Guardar contraseña</button>
+      <button class="boton tonal ancho" type="submit">Guardar contraseña</button>
     </form>
   </main>
-</body>
-</html>
+{% endblock %}

@@ -1,0 +1,96 @@
+name: APK Android
+
+# Compila el APK de EasyStock y lo publica en la sección "Releases" del repositorio.
+# Necesita la variable APP_URL (Settings > Secrets and variables > Actions > Variables),
+# por ejemplo https://easystock.onrender.com
+#
+# Solo hay que volver a compilar si cambia lo de android-app/ o la dirección del servidor:
+# los cambios de pantallas (pwa/) llegan solos a los celulares al publicar el servidor.
+
+on:
+  workflow_dispatch:
+    inputs:
+      app_url:
+        description: "Dirección del servidor (vacío = usa la variable APP_URL)"
+        required: false
+  push:
+    branches: [main]
+    paths: ["android-app/**", ".github/workflows/apk.yml"]
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: android-app
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: android-app/package-lock.json
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+
+      - name: Instalar Capacitor
+        run: npm ci
+
+      - name: Configurar la dirección del servidor
+        run: node configurar.js "${{ inputs.app_url || vars.APP_URL }}"
+
+      - name: Preparar el proyecto Android
+        run: npx cap sync android
+
+      - name: Llave de firma propia (opcional)
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/llave.jks"
+            echo "KEYSTORE_PATH=$RUNNER_TEMP/llave.jks" >> "$GITHUB_ENV"
+            echo "Se firma con la llave del secreto ANDROID_KEYSTORE_BASE64."
+          else
+            echo "::warning::Se firma con la llave del piloto (firma/piloto.jks). Ver android-app/LEEME.md."
+          fi
+
+      - name: Compilar APK
+        working-directory: android-app/android
+        env:
+          VERSION_CODE: ${{ github.run_number }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          # Los secretos vacíos no deben tapar los valores del piloto.
+          [ -z "$KEYSTORE_PASSWORD" ] && unset KEYSTORE_PASSWORD
+          [ -z "$KEY_ALIAS" ] && unset KEY_ALIAS
+          [ -z "$KEY_PASSWORD" ] && unset KEY_PASSWORD
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon
+          mkdir -p ../salida
+          cp app/build/outputs/apk/release/app-release.apk "../salida/EasyStock-1.0.${{ github.run_number }}.apk"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: EasyStock-1.0.${{ github.run_number }}
+          path: android-app/salida/*.apk
+
+      - name: Publicar en Releases
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: apk-${{ github.run_number }}
+          name: EasyStock 1.0.${{ github.run_number }}
+          body: |
+            APK para Android. Descárgalo desde el celular, ábrelo e instálalo (permite "instalar apps desconocidas").
+            Si ya tienes EasyStock instalado, se actualiza sin perder la sesión.
+          files: android-app/salida/*.apk
+          make_latest: true
