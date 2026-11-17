@@ -652,3 +652,56 @@ class AsegurarDuenoTests(TestCase):
     def test_sin_variables_no_hace_nada(self):
         self.correr(DJANGO_SUPERUSER_USERNAME="", DJANGO_SUPERUSER_PASSWORD="")
         self.assertFalse(get_user_model().objects.exists())
+
+
+class ImportacionRapidaTests(Base):
+    """La revisión no escribe nada y da lo mismo que guardar; así no se traba con archivos grandes."""
+
+    def filas(self):
+        from inventario.importacion import COLUMNAS
+        datos = [
+            # Ya existe por código (el de la Base): solo aviso, no suma piezas.
+            ["Fundas", "Apple", "iPhone 14 Pro", "Funda uso rudo", "", "", "7501", "250", "", "", "Cajonera 2", "", "", "4"],
+            # Ya existe sin código (misma categoría, modelo, producto, color y material).
+            ["Fundas", "Apple", "iPhone 14 Pro", "Funda silicón", "Rojo", "", "", "180", "", "", "Vitrina", "", "", "2"],
+            # Nuevas: comparten una ubicación nueva y otra que ya existe.
+            ["Micas", "Samsung", "Galaxy S24", "Mica 9H", "", "Cristal", "7509990001112", "150", "40", "3", "Estante B", "1", "", "6"],
+            ["Micas", "Samsung", "Galaxy S24", "Mica privacidad", "", "", "", "160", "", "", "Estante B", "1", "", "3"],
+            ["Cargadores", "Genérico", "USB-C", "Cargador 20W", "Blanco", "", "", "220", "", "", "Cajonera 2", "", "", "5"],
+            # Nueva sin piezas.
+            ["Cables", "Genérico", "USB-C", "Cable 1 m", "", "", "", "90", "", "", "", "", "", "0"],
+        ]
+        return [{**dict(zip(COLUMNAS, fila)), "_fila": i + 2} for i, fila in enumerate(datos)]
+
+    def setUp(self):
+        Variante.objects.create(producto=Producto.objects.create(
+            categoria=self.fundas, modelo_telefono=self.iphone14pro, nombre="Funda silicón"), color="Rojo")
+
+    def test_revision_igual_a_guardar(self):
+        from inventario.importacion import importar_filas
+        conteo = (Variante.objects.count(), Ubicacion.objects.count(), Movimiento.objects.count())
+        with self.assertNumQueries(3):
+            vista = importar_filas(self.filas(), usuario=self.admin, guardar=False)
+        self.assertEqual((Variante.objects.count(), Ubicacion.objects.count(), Movimiento.objects.count()), conteo)
+
+        real = importar_filas(self.filas(), usuario=self.admin, guardar=True)
+        self.assertTrue(real.guardado)
+        for campo in ("variantes_nuevas", "variantes_existentes", "ubicaciones_nuevas", "piezas", "avisos"):
+            self.assertEqual(getattr(vista, campo), getattr(real, campo), campo)
+        self.assertEqual((vista.variantes_nuevas, vista.variantes_existentes, vista.ubicaciones_nuevas, vista.piezas),
+                         (4, 2, 2, 14))  # "Estante B·1" y "Cajonera 2" sin nivel
+        self.assertEqual([fila for fila, _ in vista.avisos], [2, 3])
+
+    def test_guardar_reutiliza_catalogo(self):
+        from inventario.importacion import COLUMNAS, importar_filas
+        filas = [{**dict(zip(COLUMNAS, ["Fundas", "Apple", "iPhone 15", f"Funda {i}", "", "", "", "100", "", "",
+                                         "Cajonera 9", "", "", "1"])), "_fila": i + 2} for i in range(30)]
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+        with CaptureQueriesContext(connection) as consultas:
+            importar_filas(filas, usuario=self.admin, guardar=True)
+        # Categoría, marca, modelo y ubicación se buscan una sola vez, no 30.
+        # Lo que queda (~16 por fila) es crear producto y variante y registrar su entrada; antes eran ~22.
+        self.assertLess(len(consultas) / 30, 17)
+        self.assertEqual(Ubicacion.objects.filter(zona="Cajonera 9").count(), 1)
+        self.assertEqual(Existencia.objects.filter(ubicacion__zona="Cajonera 9").count(), 30)
