@@ -194,77 +194,147 @@ class Resultado:
         return self.variantes_nuevas + self.variantes_existentes
 
 
-class _Simulacion(Exception):
-    """Se lanza para deshacer la transacción cuando solo se está revisando."""
+def _trozos(valores, tamano=500):
+    valores = sorted(valores)
+    for i in range(0, len(valores), tamano):
+        yield valores[i:i + tamano]
 
 
 def importar_filas(filas, *, usuario, guardar):
-    """Importa filas crudas. Con guardar=False hace todo y luego lo deshace (vista previa).
+    """Importa filas crudas. Con guardar=False solo calcula qué pasaría (vista previa).
 
     Si hay cualquier error, no se guarda nada.
     """
     from django.db import transaction
 
+    resultado = Resultado()
+    limpias, resultado.errores = validar_filas(filas)
+    if resultado.errores:
+        return resultado
+    if not guardar:
+        _previsualizar(limpias, resultado)
+        return resultado
+    with transaction.atomic():
+        _guardar(limpias, usuario, resultado)
+    resultado.guardado = True
+    return resultado
+
+
+def _aviso_existente(resultado, f, descripcion):
+    resultado.avisos.append((
+        f["_fila"],
+        f"{descripcion} ya estaba registrado; no se sumaron sus {f['cantidad']} piezas "
+        "para no duplicar el stock. Registra una entrada si llegaron piezas nuevas.",
+    ))
+
+
+def _previsualizar(limpias, resultado):
+    """Vista previa SIN escribir en la base de datos: unas cuantas consultas para todo el archivo.
+
+    Debe dar exactamente lo mismo que _guardar (lo comprueba una prueba). Antes la revisión
+    guardaba y deshacía fila por fila (~20 consultas por fila) y en Render gratis tardaba más
+    de 30 segundos con archivos grandes, así que la página se quedaba "trabada".
+    """
+    from catalogo.models import Variante
+
+    from .models import Ubicacion
+
+    codigos = {f["codigo_barras"] for f in limpias if f["codigo_barras"]}
+    codigos_existentes = set()
+    for trozo in _trozos(codigos):
+        codigos_existentes.update(
+            Variante.objects.filter(codigo_barras__in=trozo).values_list("codigo_barras", flat=True)
+        )
+    nombres = {f["producto"] for f in limpias if not f["codigo_barras"]}
+    claves_existentes, descripciones = set(), {}
+    for trozo in _trozos(nombres):
+        for v in Variante.objects.filter(producto__nombre__in=trozo).select_related(
+            "producto__categoria", "producto__modelo_telefono__marca"
+        ):
+            p = v.producto
+            clave = (p.categoria.nombre, p.modelo_telefono.marca.nombre, p.modelo_telefono.nombre,
+                     p.nombre, v.color, v.material)
+            claves_existentes.add(clave)
+            descripciones[clave] = str(v)
+    ubicaciones = set(Ubicacion.objects.values_list("zona", "nivel", "caja"))
+
+    for f in limpias:
+        clave = (f["categoria"], f["marca"], f["modelo"], f["producto"], f["color"], f["material"])
+        if f["codigo_barras"]:
+            existe = f["codigo_barras"] in codigos_existentes
+            descripcion = f"El código {f['codigo_barras']}"
+        else:
+            existe = clave in claves_existentes
+            descripcion = descripciones.get(clave, f["producto"])
+        if existe:
+            resultado.variantes_existentes += 1
+        else:
+            resultado.variantes_nuevas += 1
+        if f["cantidad"] <= 0:
+            continue
+        if existe:
+            _aviso_existente(resultado, f, descripcion)
+            continue
+        lugar = (f["zona"], f["nivel"], f["caja"])
+        if lugar not in ubicaciones:
+            ubicaciones.add(lugar)
+            resultado.ubicaciones_nuevas += 1
+        resultado.piezas += f["cantidad"]
+
+
+def _guardar(limpias, usuario, resultado):
+    """Guarda las filas. Reutiliza categorías, marcas, modelos, productos y ubicaciones ya buscados."""
     from catalogo.models import Categoria, Marca, ModeloTelefono, Producto, Variante
 
     from .models import Movimiento, Ubicacion
     from .services import registrar_movimiento
 
-    resultado = Resultado()
-    limpias, resultado.errores = validar_filas(filas)
-    if resultado.errores:
-        return resultado
+    memoria = {}
 
-    try:
-        with transaction.atomic():
-            for f in limpias:
-                categoria, _ = Categoria.objects.get_or_create(nombre=f["categoria"])
-                marca, _ = Marca.objects.get_or_create(nombre=f["marca"])
-                modelo, _ = ModeloTelefono.objects.get_or_create(marca=marca, nombre=f["modelo"])
-                producto, _ = Producto.objects.get_or_create(
-                    categoria=categoria, modelo_telefono=modelo, nombre=f["producto"]
-                )
-                datos = {"precio": f["precio"], "costo": f["costo"],
-                         "stock_minimo": f["stock_minimo"], "creado_por": usuario}
-                if f["codigo_barras"]:
-                    variante, creada = Variante.objects.get_or_create(
-                        codigo_barras=f["codigo_barras"],
-                        defaults={"producto": producto, "color": f["color"], "material": f["material"], **datos},
-                    )
-                else:
-                    variante, creada = Variante.objects.get_or_create(
-                        producto=producto, color=f["color"], material=f["material"], defaults=datos
-                    )
-                if creada:
-                    resultado.variantes_nuevas += 1
-                else:
-                    resultado.variantes_existentes += 1
+    def obtener(modelo, **campos):
+        clave = (modelo.__name__, tuple(sorted((k, getattr(v, "pk", v)) for k, v in campos.items())))
+        if clave in memoria:
+            return memoria[clave], False
+        objeto, creado = modelo.objects.get_or_create(**campos)
+        memoria[clave] = objeto
+        return objeto, creado
 
-                if f["cantidad"] <= 0:
-                    continue
-                if not creada:
-                    resultado.avisos.append((
-                        f["_fila"],
-                        f"{variante} ya estaba registrado; no se sumaron sus {f['cantidad']} piezas "
-                        "para no duplicar el stock. Registra una entrada si llegaron piezas nuevas.",
-                    ))
-                    continue
-                ubicacion, ub_nueva = Ubicacion.objects.get_or_create(
-                    zona=f["zona"], nivel=f["nivel"], caja=f["caja"]
-                )
-                resultado.ubicaciones_nuevas += int(ub_nueva)
-                registrar_movimiento(
-                    variante=variante, ubicacion=ubicacion, tipo=Movimiento.Tipo.ENTRADA,
-                    motivo=Movimiento.Motivo.ALTA, cantidad=f["cantidad"], usuario=usuario,
-                    nota="Importación de inventario",
-                )
-                resultado.piezas += f["cantidad"]
-            if not guardar:
-                raise _Simulacion
-    except _Simulacion:
-        return resultado
-    resultado.guardado = True
-    return resultado
+    for f in limpias:
+        categoria, _ = obtener(Categoria, nombre=f["categoria"])
+        marca, _ = obtener(Marca, nombre=f["marca"])
+        modelo, _ = obtener(ModeloTelefono, marca=marca, nombre=f["modelo"])
+        producto, _ = obtener(Producto, categoria=categoria, modelo_telefono=modelo, nombre=f["producto"])
+        datos = {"precio": f["precio"], "costo": f["costo"],
+                 "stock_minimo": f["stock_minimo"], "creado_por": usuario}
+        if f["codigo_barras"]:
+            variante, creada = Variante.objects.get_or_create(
+                codigo_barras=f["codigo_barras"],
+                defaults={"producto": producto, "color": f["color"], "material": f["material"], **datos},
+            )
+            descripcion = f"El código {f['codigo_barras']}"
+        else:
+            variante, creada = Variante.objects.get_or_create(
+                producto=producto, color=f["color"], material=f["material"], defaults=datos
+            )
+            descripcion = None  # str(variante) hace consultas; solo se calcula si hace falta el aviso
+        if creada:
+            resultado.variantes_nuevas += 1
+        else:
+            resultado.variantes_existentes += 1
+
+        if f["cantidad"] <= 0:
+            continue
+        if not creada:
+            _aviso_existente(resultado, f, descripcion or str(variante))
+            continue
+        ubicacion, ub_nueva = obtener(Ubicacion, zona=f["zona"], nivel=f["nivel"], caja=f["caja"])
+        resultado.ubicaciones_nuevas += int(ub_nueva)
+        registrar_movimiento(
+            variante=variante, ubicacion=ubicacion, tipo=Movimiento.Tipo.ENTRADA,
+            motivo=Movimiento.Motivo.ALTA, cantidad=f["cantidad"], usuario=usuario,
+            nota="Importación de inventario",
+        )
+        resultado.piezas += f["cantidad"]
 
 
 def plantilla_xlsx():

@@ -86,7 +86,7 @@ Cualquier servicio con Python, PostgreSQL y HTTPS sirve. Variables necesarias en
 ```bash
 python manage.py collectstatic --noinput
 python manage.py migrate
-gunicorn config.wsgi
+gunicorn config.wsgi --timeout 180   # la importación de archivos grandes puede tardar
 ```
 
 ## APK de Android

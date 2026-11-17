@@ -78,7 +78,7 @@
           </div>
         {% endif %}
 
-        <form method="post" class="acciones">
+        <form method="post" class="acciones" data-espera="Importando… con archivos grandes puede tardar un par de minutos. No cierres esta página.">
           {% csrf_token %}
           <input type="hidden" name="accion" value="confirmar">
           <input type="submit" class="default" value="Confirmar e importar">
@@ -88,12 +88,25 @@
     {% endif %}
 
     {% if not resultado or resultado.errores %}
-      <form method="post" enctype="multipart/form-data" class="acciones">
+      <form method="post" enctype="multipart/form-data" class="acciones" data-espera="Revisando el archivo… espera unos segundos.">
         {% csrf_token %}
-        <input type="file" name="archivo" accept=".xlsx,.csv" required>
+        <input type="file" name="archivo" accept=".xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv" required>
         <input type="submit" class="default" value="Revisar archivo">
       </form>
+      <p class="help">Si el servidor estaba dormido (plan gratis de Render), la primera vez puede tardar hasta un minuto.</p>
     {% endif %}
+    <p id="espera" class="info" hidden style="font-weight:600"></p>
   </div>
 </div>
+<script>
+  // Evita dobles envíos y deja claro que el servidor está trabajando.
+  document.querySelectorAll("form[data-espera]").forEach(function (form) {
+    form.addEventListener("submit", function () {
+      var aviso = document.getElementById("espera");
+      aviso.textContent = form.dataset.espera;
+      aviso.hidden = false;
+      form.querySelectorAll("input[type=submit]").forEach(function (b) { b.disabled = true; b.value = "Procesando…"; });
+    });
+  });
+</script>
 {% endblock %}
