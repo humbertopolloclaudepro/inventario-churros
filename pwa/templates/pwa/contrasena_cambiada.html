@@ -1,19 +1,14 @@
-{% load static %}<!doctype html>
-<html lang="es-MX">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#b45309">
-  <title>Contraseña cambiada · Inventario</title>
-  <link rel="stylesheet" href="{% static 'pwa/styles.css' %}">
-</head>
-<body>
-  <main>
-    <div class="formulario tarjeta">
-      <h2>Listo</h2>
+{% extends "pwa/base.html" %}
+{% block titulo %}Contraseña cambiada · EasyStock{% endblock %}
+{% block cuerpo %}
+  <header class="appbar">
+    <a class="icono-boton" href="{% url 'app' %}" aria-label="Volver"><svg><use href="#i-atras"/></svg></a>
+    <h1>Listo</h1>
+  </header>
+  <main class="contenido">
+    <div class="formulario">
       <p>Tu contraseña se cambió. La próxima vez que entres, usa la nueva.</p>
-      <a class="boton primario" href="{% url 'app' %}">Volver a la app</a>
+      <a class="boton tonal ancho" href="{% url 'app' %}">Volver a la app</a>
     </div>
   </main>
-</body>
-</html>
+{% endblock %}

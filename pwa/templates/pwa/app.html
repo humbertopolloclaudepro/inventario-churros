@@ -1,106 +1,170 @@
-{% load static %}<!doctype html>
-<html lang="es-MX">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#b45309">
-  <title>Inventario · Los Churros Rellenos</title>
-  <link rel="manifest" href="{% url 'manifest' %}">
-  <link rel="icon" href="{% static 'pwa/icons/icon-192.png' %}">
-  <link rel="apple-touch-icon" href="{% static 'pwa/icons/icon-192.png' %}">
-  <link rel="stylesheet" href="{% static 'pwa/styles.css' %}">
-</head>
-<body data-admin="{{ es_admin|yesno:'1,0' }}">
-  <header class="barra">
-    <strong>Inventario</strong>
-    <a class="usuario" href="{% url 'cambiar-contrasena' %}" title="Cambiar contraseña">{{ request.user.get_username }}{% if es_admin %} · Admin{% endif %}</a>
-    {% if es_admin and request.user.is_staff %}<a class="enlace" href="{% url 'admin:index' %}">Panel</a>{% endif %}
-    <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="enlace" type="submit">Salir</button></form>
-  </header>
-
-  <main>
-    <!-- BUSCAR -->
-    <section id="vista-buscar" class="vista activa">
-      <label class="campo-busqueda">
-        <span class="oculto">Buscar producto</span>
-        <input id="q" type="search" placeholder='Busca: "mica s23 ultra"' autocomplete="off" enterkeyhint="search">
-      </label>
-      <div id="resultados" class="lista" aria-live="polite">
-        <p class="vacio">Escribe al menos 2 letras o escanea un código.</p>
+{% extends "pwa/base.html" %}{% load static %}
+{% block titulo %}Inventario EasyStock{% endblock %}
+{% block atributos_body %}data-admin="{{ es_admin|yesno:'1,0' }}"{% endblock %}
+{% block cuerpo %}
+  <!-- ============ INICIO: inventario ============ -->
+  <section id="p-inicio" class="pantalla activa" aria-label="Inventario">
+    <header class="appbar">
+      <h1>Inventario EasyStock</h1>
+      <button class="icono-boton" type="button" id="btn-menu" aria-label="Más opciones" aria-haspopup="menu"><svg><use href="#i-menu"/></svg></button>
+      <form method="post" action="{% url 'logout' %}">{% csrf_token %}
+        <button class="icono-boton" type="submit" aria-label="Cerrar Sesión" title="Cerrar Sesión"><svg><use href="#i-salir"/></svg></button>
+      </form>
+    </header>
+    <nav id="menu" class="menu" role="menu" hidden>
+      <p class="menu-usuario">{{ request.user.get_username }}{% if es_admin %} · Administrador{% else %} · Vendedor{% endif %}</p>
+      <button type="button" role="menuitem" data-ir="alta"><svg><use href="#i-nuevo"/></svg>Nuevo producto</button>
+      <button type="button" role="menuitem" data-ir="auditar"><svg><use href="#i-auditar"/></svg>Auditoría</button>
+      <a role="menuitem" href="{% url 'cambiar-contrasena' %}"><svg><use href="#i-llave"/></svg>Cambiar contraseña</a>
+      {% if es_admin and request.user.is_staff %}<a role="menuitem" href="{% url 'admin:index' %}"><svg><use href="#i-panel"/></svg><span>Panel</span></a>{% endif %}
+    </nav>
+    <main class="contenido">
+      <div class="busqueda">
+        <label class="campo con-icono">
+          <svg aria-hidden="true"><use href="#i-buscar"/></svg>
+          <input id="q" type="search" placeholder=" " autocomplete="off" enterkeyhint="search">
+          <span>Buscar: "mica s23" o "cajonera 2"</span>
+        </label>
+        <label class="orden" title="Ordenar">
+          <svg aria-hidden="true"><use href="#i-ordenar"/></svg>
+          <select id="orden" aria-label="Ordenar">
+            <option value="nombre">Nombre (A-Z)</option>
+            <option value="-nombre">Nombre (Z-A)</option>
+            <option value="cantidad">Menos stock</option>
+            <option value="-cantidad">Más stock</option>
+            <option value="reciente">Recientes</option>
+          </select>
+        </label>
       </div>
-    </section>
+      <p id="inv-total" class="sub"></p>
+      <div id="inv-lista" class="lista" aria-live="polite"><p class="vacio">Cargando…</p></div>
+    </main>
+    <button class="fab" type="button" data-ir="escanear"><svg aria-hidden="true"><use href="#i-escanear"/></svg>Escanear</button>
+  </section>
 
-    <!-- ESCANEAR -->
-    <section id="vista-escanear" class="vista">
+  <!-- ============ ESCANEAR ============ -->
+  <section id="p-escanear" class="pantalla" aria-label="Escanear producto">
+    <header class="appbar">
+      <button class="icono-boton" type="button" data-atras aria-label="Volver"><svg><use href="#i-atras"/></svg></button>
+      <h1>Escanear Producto</h1>
+    </header>
+    <main class="contenido">
       <div id="lector" class="lector" hidden></div>
-      <div class="fila">
-        <button id="btn-escanear" class="boton primario" type="button">Activar cámara</button>
-      </div>
+      <p class="sub centrado">Apunta la cámara al código QR o de barras.</p>
+      <div class="fila"><button id="btn-escanear" class="boton tonal" type="button">Activar cámara</button></div>
       <form id="form-codigo-manual" class="fila">
-        <input id="codigo-manual" placeholder="o teclea el código" inputmode="text" autocomplete="off">
-        <button class="boton" type="submit">Buscar</button>
+        <label class="campo"><input id="codigo-manual" placeholder=" " autocomplete="off"><span>o teclea el código</span></label>
+        <button class="boton tonal angosto" type="submit">Buscar</button>
       </form>
       <div id="resultado-escaneo" class="lista" aria-live="polite"></div>
-    </section>
+    </main>
+  </section>
 
-    <!-- ALTA RÁPIDA -->
-    <section id="vista-alta" class="vista">
-      <form id="form-alta" class="formulario">
-        <h2>Alta rápida</h2>
-        <label>Código de barras
-          <input name="codigo_barras" id="alta-codigo" placeholder="Vacío = el sistema genera uno" autocomplete="off">
+  <!-- ============ PRODUCTO ============ -->
+  <section id="p-producto" class="pantalla" aria-label="Producto">
+    <header class="appbar">
+      <button class="icono-boton" type="button" data-atras aria-label="Volver"><svg><use href="#i-atras"/></svg></button>
+      <h1>Producto</h1>
+    </header>
+    <main class="contenido" id="producto-detalle"></main>
+  </section>
+
+  <!-- ============ NUEVO PRODUCTO ============ -->
+  <section id="p-alta" class="pantalla" aria-label="Nuevo producto">
+    <header class="appbar">
+      <button class="icono-boton" type="button" data-atras aria-label="Volver"><svg><use href="#i-atras"/></svg></button>
+      <h1>Nuevo Producto</h1>
+    </header>
+    <main class="contenido">
+      <form id="form-alta" class="formulario" novalidate>
+        <p class="sku" id="alta-sku-texto" hidden>SKU: <span id="alta-sku"></span></p>
+        <label class="campo" id="alta-codigo-campo">
+          <input name="codigo_barras" id="alta-codigo" placeholder=" " autocomplete="off">
+          <span>SKU / código de barras (vacío = se genera)</span>
         </label>
-        <label>Categoría
-          <span class="con-boton"><select name="categoria" id="alta-categoria" required></select>
-          <button type="button" class="boton chico" data-nuevo="categoria" aria-label="Nueva categoría">+</button></span>
+        <label class="campo">
+          <input name="nombre_producto" placeholder=" " autocomplete="off" required>
+          <span>Nombre del producto</span>
         </label>
-        <label>Marca
-          <span class="con-boton"><select id="alta-marca" required></select>
-          <button type="button" class="boton chico" data-nuevo="marca" aria-label="Nueva marca">+</button></span>
+        <div class="con-pasos">
+          <label class="campo">
+            <input name="cantidad" id="alta-cantidad" type="number" min="0" value="1" placeholder=" " inputmode="numeric" required>
+            <span>Cantidad inicial</span>
+          </label>
+          <button type="button" class="paso menos" data-paso="-1" data-para="alta-cantidad" aria-label="Una menos"><svg><use href="#i-menos"/></svg></button>
+          <button type="button" class="paso mas" data-paso="1" data-para="alta-cantidad" aria-label="Una más"><svg><use href="#i-mas"/></svg></button>
+        </div>
+        <label class="campo con-icono fijo">
+          <svg aria-hidden="true"><use href="#i-ubicacion"/></svg>
+          <select name="ubicacion" id="alta-ubicacion"></select>
+          <span>Ubicación (Ej. Cajonera 2, Nivel B)</span>
         </label>
-        <label>Modelo de teléfono
-          <span class="con-boton"><select name="modelo_telefono" id="alta-modelo" required></select>
-          <button type="button" class="boton chico" data-nuevo="modelo" aria-label="Nuevo modelo">+</button></span>
+        <label class="campo con-icono">
+          <svg aria-hidden="true"><use href="#i-dinero"/></svg>
+          <input name="precio" type="number" min="0" step="0.01" placeholder=" " inputmode="decimal" required>
+          <span>Precio de venta ($)</span>
         </label>
-        <label>Producto
-          <input name="nombre_producto" required placeholder="Funda uso rudo" autocomplete="off">
+        {% if es_admin %}
+        <label class="campo con-icono">
+          <svg aria-hidden="true"><use href="#i-dinero"/></svg>
+          <input name="costo" type="number" min="0" step="0.01" placeholder=" " inputmode="decimal">
+          <span>Costo por unidad ($)</span>
         </label>
-        <div class="dos">
-          <label>Color <input name="color" autocomplete="off"></label>
-          <label>Material <input name="material" autocomplete="off"></label>
+        {% endif %}
+        <div class="con-boton">
+          <label class="campo fijo"><select name="categoria" id="alta-categoria" required></select><span>Categoría</span></label>
+          <button type="button" class="paso neutro" data-nuevo="categoria" aria-label="Nueva categoría"><svg><use href="#i-mas"/></svg></button>
+        </div>
+        <div class="con-boton">
+          <label class="campo fijo"><select id="alta-marca" required></select><span>Marca</span></label>
+          <button type="button" class="paso neutro" data-nuevo="marca" aria-label="Nueva marca"><svg><use href="#i-mas"/></svg></button>
+        </div>
+        <div class="con-boton">
+          <label class="campo fijo"><select name="modelo_telefono" id="alta-modelo" required></select><span>Modelo de teléfono</span></label>
+          <button type="button" class="paso neutro" data-nuevo="modelo" aria-label="Nuevo modelo"><svg><use href="#i-mas"/></svg></button>
         </div>
         <div class="dos">
-          <label>Precio de venta <input name="precio" type="number" min="0" step="0.01" inputmode="decimal" required></label>
-          {% if es_admin %}<label>Costo <input name="costo" type="number" min="0" step="0.01" inputmode="decimal"></label>{% endif %}
+          <label class="campo"><input name="color" placeholder=" " autocomplete="off"><span>Color</span></label>
+          <label class="campo"><input name="material" placeholder=" " autocomplete="off"><span>Material</span></label>
         </div>
-        <div class="dos">
-          <label>Cantidad <input name="cantidad" type="number" min="0" value="1" inputmode="numeric" required></label>
-          <label>Ubicación <select name="ubicacion" id="alta-ubicacion"></select></label>
+
+        <p class="titulo-foto">Fotografía de referencia</p>
+        <div class="foto" id="alta-foto"><svg aria-hidden="true"><use href="#i-sin-foto"/></svg></div>
+        <div class="fila centrada">
+          <label class="boton tonal chico"><svg><use href="#i-camara"/></svg>Cámara
+            <input type="file" accept="image/*" capture="environment" data-foto="alta" hidden></label>
+          <label class="boton tonal chico"><svg><use href="#i-galeria"/></svg>Galería
+            <input type="file" accept="image/*" data-foto="alta" hidden></label>
         </div>
-        <button class="boton primario" type="submit">Guardar producto</button>
+
+        <button class="boton tonal ancho" type="submit">Guardar</button>
       </form>
-      <div id="resultado-alta" class="lista"></div>
-    </section>
+    </main>
+  </section>
 
-    <!-- AUDITORÍA -->
-    <section id="vista-auditar" class="vista">
+  <!-- ============ AUDITORÍA ============ -->
+  <section id="p-auditar" class="pantalla" aria-label="Auditoría">
+    <header class="appbar">
+      <button class="icono-boton" type="button" data-atras aria-label="Volver"><svg><use href="#i-atras"/></svg></button>
+      <h1>Auditoría</h1>
+    </header>
+    <main class="contenido">
       <div id="aud-inicio" class="formulario">
-        <h2>Auditoría</h2>
         <p class="sub">Cuenta todo lo que hay en una zona. Al terminar, un administrador revisa las diferencias y ajusta el inventario.</p>
-        <label>Zona <select id="aud-zona"></select></label>
-        <button id="aud-empezar" class="boton primario" type="button">Empezar conteo</button>
+        <label class="campo fijo"><select id="aud-zona"></select><span>Zona</span></label>
+        <button id="aud-empezar" class="boton tonal ancho" type="button">Empezar conteo</button>
         <div id="aud-pendientes" class="lista"></div>
       </div>
 
       <div id="aud-conteo" hidden>
         <h2 id="aud-titulo" class="aud-titulo"></h2>
         <p id="aud-progreso" class="sub"></p>
-        <label class="aud-caja">Caja que estás contando <select id="aud-ubic"></select></label>
+        <label class="campo fijo aud-caja"><select id="aud-ubic"></select><span>Caja que estás contando</span></label>
         <div id="lector-aud" class="lector" hidden></div>
-        <div class="fila"><button id="aud-camara" class="boton primario" type="button">Escanear</button></div>
+        <div class="fila"><button id="aud-camara" class="boton tonal" type="button">Escanear</button></div>
         <form id="aud-manual" class="fila">
-          <input id="aud-codigo" placeholder="o teclea el código" autocomplete="off">
-          <button class="boton" type="submit">Contar</button>
+          <label class="campo"><input id="aud-codigo" placeholder=" " autocomplete="off"><span>o teclea el código</span></label>
+          <button class="boton tonal angosto" type="submit">Contar</button>
         </form>
         <p class="sub">Escanea el QR de la caja y después cada pieza que hay dentro. Usa − y + para corregir.</p>
         <div id="aud-lineas" class="lista"></div>
@@ -111,26 +175,26 @@
       </div>
 
       <div id="aud-revision" class="formulario" hidden></div>
-    </section>
-  </main>
-
-  <nav class="pestanas">
-    <button data-vista="buscar" class="activa" type="button">Buscar</button>
-    <button data-vista="escanear" type="button">Escanear</button>
-    <button data-vista="alta" type="button">Alta</button>
-    <button data-vista="auditar" type="button">Auditar</button>
-  </nav>
+    </main>
+  </section>
 
   <!-- Diálogo de movimiento (entrada / salida) -->
   <dialog id="dlg-mov">
     <form id="form-mov" method="dialog" class="formulario">
       <h2 id="mov-titulo">Movimiento</h2>
       <p id="mov-producto" class="sub"></p>
-      <label>Motivo <select id="mov-motivo"></select></label>
-      <label>Ubicación <select id="mov-ubicacion" required></select></label>
-      <label>Cantidad <input id="mov-cantidad" type="number" min="1" value="1" inputmode="numeric" required></label>
+      <label class="campo fijo"><select id="mov-motivo"></select><span>Motivo</span></label>
+      <label class="campo fijo con-icono">
+        <svg aria-hidden="true"><use href="#i-ubicacion"/></svg>
+        <select id="mov-ubicacion" required></select><span>Ubicación</span>
+      </label>
+      <div class="con-pasos">
+        <label class="campo"><input id="mov-cantidad" type="number" min="1" value="1" placeholder=" " inputmode="numeric" required><span>Cantidad</span></label>
+        <button type="button" class="paso menos" data-paso="-1" data-para="mov-cantidad" data-minimo="1" aria-label="Una menos"><svg><use href="#i-menos"/></svg></button>
+        <button type="button" class="paso mas" data-paso="1" data-para="mov-cantidad" aria-label="Una más"><svg><use href="#i-mas"/></svg></button>
+      </div>
       <div class="fila">
-        <button class="boton" value="cancelar" type="button" id="mov-cancelar">Cancelar</button>
+        <button class="boton" type="button" id="mov-cancelar">Cancelar</button>
         <button class="boton primario" type="submit" id="mov-ok">Registrar</button>
       </div>
     </form>
@@ -138,7 +202,6 @@
 
   <div id="aviso" class="aviso" role="status" hidden></div>
 
-  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js" defer></script>
+  <script src="{% static 'pwa/vendor/html5-qrcode.min.js' %}" defer></script>
   <script src="{% static 'pwa/app.js' %}" defer></script>
-</body>
-</html>
+{% endblock %}

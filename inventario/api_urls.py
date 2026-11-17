@@ -5,6 +5,8 @@ from . import api
 urlpatterns = [
     path("yo/", api.yo, name="api-yo"),
     path("buscar/", api.buscar, name="api-buscar"),
+    path("inventario/", api.inventario, name="api-inventario"),
+    path("variantes/<int:pk>/foto/", api.foto_variante, name="api-foto-variante"),
     path("codigo/", api.por_codigo, name="api-codigo"),
     path("catalogo/", api.catalogo, name="api-catalogo"),
     path("categorias/", api.crear_categoria, name="api-crear-categoria"),

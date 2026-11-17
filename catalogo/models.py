@@ -99,3 +99,25 @@ class Variante(models.Model):
     def __str__(self):
         detalle = " ".join(p for p in [self.color, self.material] if p)
         return f"{self.producto} · {detalle}" if detalle else str(self.producto)
+
+
+class FotoVariante(models.Model):
+    """Fotografía de referencia de una variante.
+
+    Se guarda dentro de la base de datos (ya reducida a JPEG de ~100 KB) para que no se
+    pierda en servicios cuyo disco se borra en cada despliegue.
+    """
+
+    variante = models.OneToOneField(Variante, on_delete=models.CASCADE, related_name="foto")
+    datos = models.BinaryField()
+    actualizada = models.DateTimeField(auto_now=True)
+    subida_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
+    )
+
+    class Meta:
+        verbose_name = "fotografía"
+        verbose_name_plural = "fotografías"
+
+    def __str__(self):
+        return f"Foto de {self.variante}"

@@ -1,0 +1,3 @@
+node_modules/
+# Lo genera configurar.js con la dirección del servidor
+capacitor.config.json

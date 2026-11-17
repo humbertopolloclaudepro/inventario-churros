@@ -2,11 +2,12 @@
 // La API nunca se guarda en caché: el stock siempre se pide al servidor.
 // TODO (iteración, P1): cola offline de movimientos en IndexedDB que se envía al
 // recuperar la conexión. La API ya acepta uuid_cliente para no duplicar.
-const CACHE = "inventario-v2";
+const CACHE = "easystock-v3";
 const ARCHIVOS = [
   "/app/",
   "{% static 'pwa/app.js' %}",
   "{% static 'pwa/styles.css' %}",
+  "{% static 'pwa/vendor/html5-qrcode.min.js' %}",
   "{% static 'pwa/icons/icon-192.png' %}",
 ];
 
@@ -26,6 +27,7 @@ self.addEventListener("fetch", (e) => {
   const url = new URL(e.request.url);
   if (e.request.method !== "GET" || url.origin !== location.origin) return;
   if (url.pathname.startsWith("/api/") || url.pathname.startsWith("/admin/")) return;
+  if (url.pathname.startsWith("/login/") || url.pathname.startsWith("/registro/")) return;
 
   if (e.request.mode === "navigate") {
     // Red primero; si no hay red, la última versión guardada.

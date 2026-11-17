@@ -6,11 +6,12 @@ from django.db.models import DecimalField, ExpressionWrapper, F, IntegerField, O
 from django.db.models.functions import Coalesce
 from django.http import HttpResponse
 from django.utils import timezone
+from django.utils.html import format_html
 
 from inventario.etiquetas import generar_pdf
 from inventario.models import Existencia, Movimiento
 
-from .models import Categoria, Marca, ModeloTelefono, Producto, Variante
+from .models import Categoria, FotoVariante, Marca, ModeloTelefono, Producto, Variante
 
 
 def anotar_variantes(qs):
@@ -129,8 +130,14 @@ class VarianteAdmin(admin.ModelAdmin):
         "producto__modelo_telefono__nombre", "producto__modelo_telefono__marca__nombre",
     ]
     autocomplete_fields = ["producto"]
-    readonly_fields = ["creado", "creado_por"]
+    readonly_fields = ["foto_col", "creado", "creado_por"]
     actions = [imprimir_etiquetas_variantes]
+
+    @admin.display(description="fotografía")
+    def foto_col(self, obj):
+        if not obj.pk or not FotoVariante.objects.filter(variante=obj).exists():
+            return "Sin foto (se toma desde la app)"
+        return format_html('<img src="/api/variantes/{}/foto/" style="max-width:240px;border-radius:8px">', obj.pk)
     list_select_related = ["producto__modelo_telefono__marca", "producto__categoria"]
 
     def get_queryset(self, request):

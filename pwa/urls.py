@@ -7,6 +7,7 @@ from . import views
 urlpatterns = [
     path("", RedirectView.as_view(url="/app/", permanent=False)),
     path("app/", views.app, name="app"),
+    path("registro/", views.registro, name="registro"),
     # Cada usuario cambia su propia contraseña (Django ya pide inicio de sesión y la mantiene activa).
     path(
         "cuenta/contrasena/",

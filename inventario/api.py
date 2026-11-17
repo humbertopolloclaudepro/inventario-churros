@@ -1,12 +1,16 @@
 """API REST que usa la app del celular (PWA)."""
-from django.db.models import Prefetch, Q
+from django.db.models import F, IntegerField, OuterRef, Prefetch, Q, Subquery, Sum, Value
+from django.db.models.functions import Coalesce
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import status
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, parser_classes
+from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 
-from catalogo.models import Categoria, Marca, ModeloTelefono, Variante
+from catalogo.fotos import FotoInvalida, preparar_foto
+from catalogo.models import Categoria, FotoVariante, Marca, ModeloTelefono, Variante
 
 from . import auditorias as aud
 from .models import Auditoria, Existencia, Movimiento, Ubicacion
@@ -27,6 +31,7 @@ def variantes_qs():
     return (
         Variante.objects.filter(activo=True)
         .select_related("producto__categoria", "producto__modelo_telefono__marca")
+        .annotate(foto_actualizada=F("foto__actualizada"))
         .prefetch_related(
             Prefetch(
                 "existencias",
@@ -40,6 +45,24 @@ def variante_data(request, pk):
     return VarianteSerializer(variantes_qs().get(pk=pk), context={"request": request}).data
 
 
+def filtrar_texto(qs, q):
+    """Código exacto o palabras sueltas: "mica s23 ultra" o "cajonera 2"."""
+    exacto = qs.filter(codigo_barras__iexact=q)
+    if exacto.exists():
+        return exacto
+    for palabra in q.split():
+        qs = qs.filter(
+            Q(producto__nombre__icontains=palabra)
+            | Q(producto__modelo_telefono__nombre__icontains=palabra)
+            | Q(producto__modelo_telefono__marca__nombre__icontains=palabra)
+            | Q(producto__categoria__nombre__icontains=palabra)
+            | Q(color__icontains=palabra)
+            | Q(material__icontains=palabra)
+            | Q(pk__in=Existencia.objects.filter(cantidad__gt=0, ubicacion__zona__icontains=palabra).values("variante"))
+        )
+    return qs
+
+
 @api_view(["GET"])
 def yo(request):
     return Response({"usuario": request.user.get_username(), "es_admin": es_admin(request.user)})
@@ -51,21 +74,63 @@ def buscar(request):
     q = request.query_params.get("q", "").strip()
     if len(q) < 2:
         return Response([])
-    qs = variantes_qs()
-    exacto = qs.filter(codigo_barras__iexact=q)
-    if exacto.exists():
-        qs = exacto
-    else:
-        for palabra in q.split():
-            qs = qs.filter(
-                Q(producto__nombre__icontains=palabra)
-                | Q(producto__modelo_telefono__nombre__icontains=palabra)
-                | Q(producto__modelo_telefono__marca__nombre__icontains=palabra)
-                | Q(producto__categoria__nombre__icontains=palabra)
-                | Q(color__icontains=palabra)
-                | Q(material__icontains=palabra)
-            )
+    qs = filtrar_texto(variantes_qs(), q)
     return Response(VarianteSerializer(qs[:30], many=True, context={"request": request}).data)
+
+
+ORDENES = {
+    "nombre": ["producto__nombre", "producto__modelo_telefono__nombre", "color"],
+    "-nombre": ["-producto__nombre", "-producto__modelo_telefono__nombre", "-color"],
+    "cantidad": ["stock", "producto__nombre"],
+    "-cantidad": ["-stock", "producto__nombre"],
+    "reciente": ["-creado"],
+}
+LIMITE_INVENTARIO = 300
+
+
+@api_view(["GET"])
+def inventario(request):
+    """Lista de la pantalla principal: todo el inventario, con filtro opcional y orden."""
+    stock = (
+        Existencia.objects.filter(variante=OuterRef("pk"))
+        .values("variante")
+        .annotate(total=Sum("cantidad"))
+        .values("total")
+    )
+    qs = variantes_qs().annotate(stock=Coalesce(Subquery(stock, output_field=IntegerField()), Value(0)))
+    q = request.query_params.get("q", "").strip()
+    if q:
+        qs = filtrar_texto(qs, q)
+    orden = request.query_params.get("orden", "nombre")
+    qs = qs.order_by(*ORDENES.get(orden, ORDENES["nombre"]))
+    total = qs.count()
+    datos = VarianteSerializer(qs[:LIMITE_INVENTARIO], many=True, context={"request": request}).data
+    return Response({"total": total, "variantes": datos})
+
+
+@api_view(["GET", "POST"])
+@parser_classes([MultiPartParser, FormParser])
+def foto_variante(request, pk):
+    """GET: la imagen. POST: sube o reemplaza la foto (campo "foto")."""
+    variante = get_object_or_404(Variante, pk=pk)
+    if request.method == "GET":
+        foto = get_object_or_404(FotoVariante, variante=variante)
+        respuesta = HttpResponse(bytes(foto.datos), content_type="image/jpeg")
+        # La URL cambia cuando cambia la foto (?v=...), así que se puede guardar mucho tiempo.
+        respuesta["Cache-Control"] = "private, max-age=2592000"
+        return respuesta
+
+    archivo = request.FILES.get("foto")
+    if not archivo:
+        return Response({"detail": "Elige o toma una foto."}, status=status.HTTP_400_BAD_REQUEST)
+    try:
+        datos = preparar_foto(archivo)
+    except FotoInvalida as e:
+        return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+    FotoVariante.objects.update_or_create(
+        variante=variante, defaults={"datos": datos, "subida_por": request.user}
+    )
+    return Response({"variante": variante_data(request, variante.pk)})
 
 
 @api_view(["GET"])

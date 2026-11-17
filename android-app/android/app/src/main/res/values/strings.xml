@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">EasyStock</string>
+    <string name="title_activity_main">EasyStock</string>
+    <string name="package_name">com.churrosrellenos.easystock</string>
+    <string name="custom_url_scheme">com.churrosrellenos.easystock</string>
+</resources>
