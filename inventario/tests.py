@@ -630,3 +630,25 @@ class RegistroTests(TestCase):
         self.assertEqual([g.name for g in usuario.groups.all()], [GRUPO_VENDEDOR])
         self.assertFalse(usuario.is_staff)
         self.assertTrue(self.client.login(username="nuevo", password="Churros-2026!"))
+
+
+class AsegurarDuenoTests(TestCase):
+    def correr(self, **entorno):
+        from unittest import mock
+        with mock.patch.dict("os.environ", entorno, clear=False):
+            call_command("asegurar_dueno", stdout=StringIO())
+
+    def test_crea_y_actualiza_la_contrasena(self):
+        self.correr(DJANGO_SUPERUSER_USERNAME="dueno", DJANGO_SUPERUSER_PASSWORD="Primera-2026")
+        dueno = get_user_model().objects.get(username="dueno")
+        self.assertTrue(dueno.is_superuser and dueno.is_staff)
+        self.assertTrue(dueno.groups.filter(name=GRUPO_ADMIN).exists())
+        self.assertTrue(self.client.login(username="dueno", password="Primera-2026"))
+
+        self.correr(DJANGO_SUPERUSER_USERNAME="dueno", DJANGO_SUPERUSER_PASSWORD="Nueva-2026")
+        self.assertEqual(get_user_model().objects.filter(username="dueno").count(), 1)
+        self.assertTrue(self.client.login(username="dueno", password="Nueva-2026"))
+
+    def test_sin_variables_no_hace_nada(self):
+        self.correr(DJANGO_SUPERUSER_USERNAME="", DJANGO_SUPERUSER_PASSWORD="")
+        self.assertFalse(get_user_model().objects.exists())

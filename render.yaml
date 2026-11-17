@@ -6,11 +6,12 @@ services:
     runtime: python
     plan: free
     buildCommand: pip install -r requirements.txt && python manage.py collectstatic --noinput
-    # Al arrancar: aplica migraciones, crea los roles y (la primera vez) el usuario administrador.
+    # Al arrancar: aplica migraciones, crea los roles y el usuario dueño. Si cambias
+    # DJANGO_SUPERUSER_PASSWORD en Render, esa será la contraseña del dueño al reiniciar.
     startCommand: >-
       python manage.py migrate --noinput &&
       python manage.py crear_roles &&
-      (python manage.py createsuperuser --noinput || true) &&
+      python manage.py asegurar_dueno &&
       gunicorn config.wsgi --bind 0.0.0.0:$PORT
     envVars:
       - key: PYTHON_VERSION
@@ -27,13 +28,11 @@ services:
         fromDatabase:
           name: easystock-db
           property: connectionString
-      # Usuario dueño (administrador). Solo se usa la primera vez.
+      # Usuario dueño (administrador). Se crea o se actualiza su contraseña en cada arranque.
       - key: DJANGO_SUPERUSER_USERNAME
         sync: false
       - key: DJANGO_SUPERUSER_PASSWORD
         sync: false
-      - key: DJANGO_SUPERUSER_EMAIL
-        value: ""
       # Código para "Crear nueva cuenta" en la app. Vacío = solo el administrador crea usuarios.
       - key: CODIGO_REGISTRO
         sync: false
